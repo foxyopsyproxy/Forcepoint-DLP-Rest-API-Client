@@ -1,0 +1,46 @@
+{
+  "info": {
+    "name": "DLP Protector Client",
+    "description": "Requests against this app's own backend (POST /api/scan, GET/POST /api/settings). See postman/README.md for how to test the Forcepoint Protector directly instead.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" }
+  ],
+  "item": [
+    {
+      "name": "Scan file",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": [] }
+          ]
+        },
+        "url": { "raw": "{{baseUrl}}/api/scan", "host": ["{{baseUrl}}"], "path": ["api", "scan"] }
+      }
+    },
+    {
+      "name": "Get settings",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/settings", "host": ["{{baseUrl}}"], "path": ["api", "settings"] }
+      }
+    },
+    {
+      "name": "Update settings",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"hostIps\": { \"enabled\": true, \"value\": \"10.20.4.51\" }\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/settings", "host": ["{{baseUrl}}"], "path": ["api", "settings"] }
+      }
+    }
+  ]
+}

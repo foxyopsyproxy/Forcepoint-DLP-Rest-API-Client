@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Documentation — Forcepoint DLP Protector File Scanner</title>
+<style>
+  :root {
+    --ground: #0a1412;
+    --surface: #111d1a;
+    --surface-2: #17231f;
+    --border: #223330;
+    --border-soft: #1a2926;
+    --ink: #e8f2ee;
+    --ink-muted: #82a099;
+    --ink-dim: #4f6864;
+    --accent: #38bdf8;
+    --accent-dim: #1b5a70;
+    --pass: #34d399;
+    --pass-bg: #12291f;
+    --warn: #f5b942;
+    --warn-bg: #2a2210;
+    --block: #f0625c;
+    --block-bg: #2c1512;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; font-family: var(--sans); background: var(--ground); color: var(--ink); }
+  body { min-height: 100vh; padding: 40px 16px 80px; display: flex; justify-content: center; }
+  .container { width: 100%; max-width: 760px; }
+
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .brand-mark {
+    width: 36px; height: 36px; border-radius: 9px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .brand-mark svg { width: 18px; height: 18px; stroke: var(--accent); }
+  h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .subtitle {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--ink-muted); margin-top: 3px;
+  }
+  .back-link {
+    flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--ink-muted); text-decoration: none;
+    border: 1px solid var(--border); border-radius: 9px; padding: 9px 14px;
+    background: var(--surface); transition: border-color .15s, color .15s;
+  }
+  .back-link:hover { border-color: var(--accent-dim); color: var(--accent); }
+  .back-link svg { width: 14px; height: 14px; }
+
+  .intro { color: var(--ink-muted); font-size: 13.5px; line-height: 1.6; margin-bottom: 28px; }
+  .intro code { font-family: var(--mono); background: var(--surface-2); padding: 1px 6px; border-radius: 5px; color: var(--ink); }
+
+  .section { margin-bottom: 28px; }
+  .section-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+  .section-head h2 { font-size: 15px; margin: 0; }
+  .section-head p { font-size: 12.5px; color: var(--ink-muted); margin: 0; }
+
+  .endpoint { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin-bottom: 10px; overflow: hidden; }
+  .endpoint-row {
+    display: flex; align-items: center; gap: 14px; padding: 13px 16px;
+    cursor: pointer; user-select: none;
+  }
+  .method {
+    font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
+    padding: 5px 11px; border-radius: 6px; flex-shrink: 0; min-width: 52px; text-align: center;
+  }
+  .method.get { background: rgba(56,189,248,0.14); color: var(--accent); border: 1px solid rgba(56,189,248,0.3); }
+  .method.post { background: var(--pass-bg); color: var(--pass); border: 1px solid #1d4d2c; }
+  .path { font-family: var(--mono); font-size: 13.5px; font-weight: 600; flex-shrink: 0; }
+  .desc { font-size: 12.5px; color: var(--ink-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chevron { color: var(--ink-dim); flex-shrink: 0; transition: transform .15s; }
+  .chevron svg { width: 16px; height: 16px; }
+  .endpoint.open .chevron { transform: rotate(180deg); }
+
+  .endpoint-body { display: none; padding: 4px 18px 18px; border-top: 1px solid var(--border-soft); }
+  .endpoint.open .endpoint-body { display: block; }
+
+  .subhead {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-dim); margin: 16px 0 8px;
+  }
+  .subhead:first-child { margin-top: 16px; }
+  table.params { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.params th, table.params td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border-soft); }
+  table.params th { color: var(--ink-muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  table.params td.name { font-family: var(--mono); color: var(--ink); }
+  table.params td.type { font-family: var(--mono); color: var(--ink-muted); }
+  table.params .req { color: var(--warn); font-size: 10.5px; font-family: var(--mono); }
+
+  pre {
+    background: var(--ground); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-family: var(--mono); font-size: 12px; line-height: 1.55;
+    overflow-x: auto; margin: 0; color: var(--ink);
+  }
+  pre .k { color: var(--accent); }
+  pre .s { color: var(--pass); }
+  pre .n { color: var(--warn); }
+  pre .c { color: var(--ink-dim); }
+
+  .status-list { display: flex; flex-direction: column; gap: 6px; }
+  .status-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .status-code { font-family: var(--mono); font-weight: 700; min-width: 34px; }
+  .status-code.ok { color: var(--pass); }
+  .status-code.err { color: var(--block); }
+  .status-row .status-desc { color: var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="top-bar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+      </div>
+      <div>
+        <h1>API Documentation</h1>
+        <div class="subtitle">Forcepoint DLP Protector File Scanner</div>
+      </div>
+    </div>
+    <a class="back-link" href="/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Back to scanner
+    </a>
+  </div>
+
+  <p class="intro">
+    Internal HTTP API served by this app's own Backend. There is no authentication and no API key —
+    it's meant to be reached only from this app's own frontend or from other services on the same
+    trusted network. It never exposes the Protector's host, port, or token directly.
+  </p>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>Scan</h2>
+      <p>Send a file to be inspected by the Forcepoint Protector</p>
+    </div>
+
+    <div class="endpoint" data-endpoint>
+      <div class="endpoint-row" data-toggle>
+        <span class="method post">POST</span>
+        <span class="path">/api/scan</span>
+        <span class="desc">Scans a file against the configured DLP policy and returns the verdict</span>
+        <span class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      </div>
+      <div class="endpoint-body">
+        <div class="subhead">Request body — multipart/form-data</div>
+        <table class="params">
+          <tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr>
+          <tr><td class="name">file</td><td class="type">binary</td><td class="req">required</td><td>The file to scan. Rejected above the configured max size.</td></tr>
+        </table>
+
+        <div class="subhead">Example response — 200 OK</div>
+        <pre>{
+  <span class="k">"globalMessageId"</span>: <span class="s">"bfdfb88a-1d7a-4eba-9f24-7c6beb571d7d"</span>,
+  <span class="k">"resolution"</span>: <span class="s">"MATCHED"</span>,
+  <span class="k">"violations"</span>: [
+    {
+      <span class="k">"policyId"</span>: <span class="s">"29017"</span>,
+      <span class="k">"policyName"</span>: <span class="s">"BulwarxTestKeyWord"</span>,
+      <span class="k">"rules"</span>: [
+        {
+          <span class="k">"ruleId"</span>: <span class="s">"rule_29017"</span>,
+          <span class="k">"ruleName"</span>: <span class="s">"BulwarxTestKeyWord"</span>,
+          <span class="k">"severity"</span>: <span class="s">"MEDIUM"</span>,
+          <span class="k">"matches"</span>: <span class="n">1</span>
+        }
+      ]
+    }
+  ],
+  <span class="k">"actions"</span>: [<span class="s">"Block"</span>],
+  <span class="k">"maxNumberOfMatches"</span>: <span class="n">1</span>,
+  <span class="k">"elapsedMs"</span>: <span class="n">80</span>,
+  <span class="k">"fileName"</span>: <span class="s">"file.txt"</span>,
+  <span class="k">"fileSizeBytes"</span>: <span class="n">73</span>
+}</pre>
+
+        <div class="subhead">Status codes</div>
+        <div class="status-list">
+          <div class="status-row"><span class="status-code ok">200</span><span class="status-desc">Scan completed — check <code>resolution</code>/<code>violations</code> for the verdict</span></div>
+          <div class="status-row"><span class="status-code err">400</span><span class="status-desc">No file sent, or the file failed to parse</span></div>
+          <div class="status-row"><span class="status-code err">413</span><span class="status-desc">File exceeds the configured maximum size</span></div>
+          <div class="status-row"><span class="status-code err">502</span><span class="status-desc">Unable to reach the Protector, or it returned an error</span></div>
+          <div class="status-row"><span class="status-code err">504</span><span class="status-desc">Timed out waiting for the Protector to respond</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>Settings</h2>
+      <p>Read or update the runtime-configurable scan settings</p>
+    </div>
+
+    <div class="endpoint" data-endpoint>
+      <div class="endpoint-row" data-toggle>
+        <span class="method get">GET</span>
+        <span class="path">/api/settings</span>
+        <span class="desc">Returns the current settings — both the raw per-field state and the effective values in use</span>
+        <span class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      </div>
+      <div class="endpoint-body">
+        <div class="subhead">Example response — 200 OK</div>
+        <pre>{
+  <span class="k">"fields"</span>: {
+    <span class="k">"maxFileSizeMb"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span>, <span class="k">"value"</span>: <span class="n">30</span> },
+    <span class="k">"requestTimeoutMs"</span>: { <span class="k">"enabled"</span>: <span class="n">true</span>, <span class="k">"value"</span>: <span class="n">300000</span> },
+    <span class="k">"hostIps"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span>, <span class="k">"value"</span>: <span class="s">""</span> },
+    <span class="k">"hostName"</span>: { <span class="k">"enabled"</span>: <span class="n">true</span>, <span class="k">"value"</span>: <span class="s">"Amit-Agent"</span> },
+    <span class="k">"destinationHttpUrl"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span>, <span class="k">"value"</span>: <span class="s">"https://dlp-client.local/upload"</span> },
+    <span class="k">"destinationHttpHostname"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span>, <span class="k">"value"</span>: <span class="s">"dlp-client.local"</span> }
+  },
+  <span class="k">"effective"</span>: {
+    <span class="k">"maxFileSizeMb"</span>: <span class="n">30</span>,
+    <span class="k">"requestTimeoutMs"</span>: <span class="n">300000</span>,
+    <span class="k">"hostIps"</span>: <span class="s">""</span>,
+    <span class="k">"hostName"</span>: <span class="s">"Amit-Agent"</span>,
+    <span class="k">"destinationHttpUrl"</span>: <span class="s">"https://dlp-client.local/upload"</span>,
+    <span class="k">"destinationHttpHostname"</span>: <span class="s">"dlp-client.local"</span>
+  }
+}</pre>
+        <p style="font-size:12px;color:var(--ink-muted);line-height:1.6;margin-top:10px">
+          <code style="font-family:var(--mono);background:var(--surface-2);padding:1px 6px;border-radius:5px;color:var(--ink)">fields</code> is the raw per-field on/off state (what the Settings screen shows).
+          <code style="font-family:var(--mono);background:var(--surface-2);padding:1px 6px;border-radius:5px;color:var(--ink)">effective</code> is what actually gets sent to the Protector on the next scan — a disabled field falls back to its server-side default or auto-detected value.
+        </p>
+      </div>
+    </div>
+
+    <div class="endpoint" data-endpoint>
+      <div class="endpoint-row" data-toggle>
+        <span class="method post">POST</span>
+        <span class="path">/api/settings</span>
+        <span class="desc">Updates one or more settings fields — only the fields included in the body are changed</span>
+        <span class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      </div>
+      <div class="endpoint-body">
+        <div class="subhead">Request body — application/json</div>
+        <table class="params">
+          <tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr>
+          <tr><td class="name">maxFileSizeMb</td><td class="type">{enabled, value}</td><td></td><td>Value: 1–500</td></tr>
+          <tr><td class="name">requestTimeoutMs</td><td class="type">{enabled, value}</td><td></td><td>Value: 1000–300000</td></tr>
+          <tr><td class="name">hostIps</td><td class="type">{enabled, value}</td><td></td><td>Comma-separated IP list</td></tr>
+          <tr><td class="name">hostName</td><td class="type">{enabled, value}</td><td></td><td>Max 253 characters</td></tr>
+          <tr><td class="name">destinationHttpUrl</td><td class="type">{enabled, value}</td><td></td><td>Must be a valid http(s):// URL</td></tr>
+          <tr><td class="name">destinationHttpHostname</td><td class="type">{enabled, value}</td><td></td><td>Max 253 characters</td></tr>
+        </table>
+
+        <div class="subhead">Example request</div>
+        <pre>{
+  <span class="k">"hostIps"</span>: { <span class="k">"enabled"</span>: <span class="n">true</span>, <span class="k">"value"</span>: <span class="s">"10.20.4.51"</span> }
+}</pre>
+
+        <div class="subhead">Status codes</div>
+        <div class="status-list">
+          <div class="status-row"><span class="status-code ok">200</span><span class="status-desc">Saved — response body is the same shape as <code>GET /api/settings</code></span></div>
+          <div class="status-row"><span class="status-code err">400</span><span class="status-desc">One or more values failed validation (see <code>error</code> for which fields)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('[data-toggle]').forEach((row) => {
+    row.addEventListener('click', () => {
+      row.closest('[data-endpoint]').classList.toggle('open');
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+{
+  "context": {
+    "global_message_id": "11111111-1111-1111-1111-111111111111",
+    "client_name": "CUSTOM_APPLICATION",
+    "data_channel": "HTTP",
+    "activity_type": "UPLOAD",
+    "occurred_message_timestamp_utc_ms": 1755374400000
+  },
+  "contentDescriptors": [
+    {
+      "id": "0",
+      "name": "sample-file.txt",
+      "item_type": "FILE",
+      "size_bytes": 436
+    }
+  ],
+  "source": {
+    "host_ips": ["127.0.0.1"],
+    "host_name": "POSTMAN-TEST"
+  },
+  "destinations": [
+    {
+      "destination_type": "WEB_APPLICATION",
+      "http_request_url": "https://dlp-client.local/upload",
+      "http_request_url_hostname": "dlp-client.local",
+      "http_request_method": "POST"
+    }
+  ]
+}

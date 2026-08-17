@@ -1,1 +1,156 @@
-# Forcepoint-DLP-Rest-API-Client
+# DLP Protector Client
+
+A web application (Node.js + Express, frontend with no build step) for checking files against
+Forcepoint DLP Protector via the Inspection REST API (v4.0). The frontend uploads a file to the
+backend, and only the backend talks to the Protector — the browser is never exposed to the
+Protector's address, port, or token.
+
+> For developers: [DEVELOPER.md](DEVELOPER.md) has a detailed technical guide — both this app's
+> own Web API and the exact request format sent to the Protector itself (including a few
+> undocumented gotchas discovered during the integration).
+
+## Installation
+
+```bash
+npm install
+```
+
+## Connection setup (.env)
+
+Copy `.env.example` to `.env` and fill in the details:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Description |
+|---|---|
+| `PROTECTOR_HOST` | Hostname/IP of the Protector |
+| `PROTECTOR_PROTOCOL` | `http` or `https` |
+| `PROTECTOR_PORT` | Port (default: 8080 for http, 8443 for https) |
+| `PROTECTOR_TOKEN` | Optional Bearer token — if empty, the header is omitted entirely |
+| `PROTECTOR_CA_CERT_PATH` | Path to a CA certificate file (PEM), for HTTPS with a self-signed cert |
+| `PROTECTOR_TLS_REJECT_UNAUTHORIZED` | `true`/`false` — whether to validate the Protector's TLS cert (false = equivalent to `curl -k`) |
+| `MAX_FILE_SIZE_MB` | Maximum file size (default: 30) |
+| `REQUEST_TIMEOUT_MS` | Timeout for the request to the Protector (default: 30000) |
+| `DESTINATION_HTTP_URL` | Sent as `destinations[0].http_request_url` — required by some Protector deployments for policy/URL-category resolution |
+| `DESTINATION_HTTP_HOSTNAME` | Sent as `destinations[0].http_request_url_hostname` (the hostname portion of the URL above) |
+| `PORT` | The port this local server listens on |
+| `LOG_FILE_PATH` | Path to the request log file (JSON lines) |
+
+## Settings screen
+
+Clicking the ⚙️ button in the top-right of the UI opens a Settings screen where you can change,
+at runtime (no server restart needed), only the following parameters — ones that can't break the
+connection to the Protector:
+
+- `MAX_FILE_SIZE_MB`, `REQUEST_TIMEOUT_MS`
+- **Source** (sent as the `source` object in the Inspection Request, used by the Protector to
+  match a policy's Source condition — by network/IP or computer name):
+  `source.host_ips` (empty = auto-detect from the request's IP),
+  `source.host_name` (empty = auto-detect from the machine running the app)
+- **Destination**: `destinations[0].http_request_url`, `destinations[0].http_request_url_hostname`
+
+Values are saved to `data/settings.json` (created automatically, not in git) and override the
+`.env` defaults until changed again. The Protector's own connection details
+(`PROTECTOR_HOST/PORT/PROTOCOL/TOKEN`, etc.) **cannot** be changed from this screen and stay in
+`.env` only, so a typo there can't take the service down.
+
+### Note on HTTPS with a self-signed certificate
+
+There are two ways to support a self-signed certificate against the Protector:
+
+1. **Recommended** — set `PROTECTOR_CA_CERT_PATH` to the CA file's path (PEM). The certificate
+   will be validated against it.
+2. **Less recommended (equivalent to `curl -k`)** — set
+   `PROTECTOR_TLS_REJECT_UNAUTHORIZED=false` to skip certificate validation entirely. Use this
+   only in test environments.
+
+## Running
+
+```bash
+npm start
+```
+
+The server listens on `http://localhost:3000` (or whatever port `PORT` is set to). Open that
+address in a browser, drag a file (or click to choose one), and click "Send for Scanning".
+
+## Installing as a Windows Service (services.msc)
+
+To move the app to another machine and run it as a Windows Service (shows up in `services.msc`,
+starts automatically with the machine, and restarts itself if it crashes) — the project ships
+with built-in support via the [`node-windows`](https://www.npmjs.com/package/node-windows)
+package.
+
+### Steps on the target machine
+
+1. **Copy the whole project folder** to the target machine (including `package.json`,
+   `server.js`, `src/`, `public/`, `scripts/`). You do **not** need to copy `node_modules/`,
+   `.env`, `logs/`, `data/`, or `daemon/` — these are regenerated on each machine.
+2. Make sure [Node.js](https://nodejs.org/) is installed on the target machine.
+3. Install dependencies:
+   ```bash
+   npm install
+   ```
+4. Set up `.env` (see "Connection setup" above) with that environment's Protector details.
+5. **Open a command prompt as Administrator** ("Run as administrator") — registering a Windows
+   service requires elevated permissions — and from the project folder, run:
+   ```bash
+   npm run service:install
+   ```
+   The service ("DLP Protector Client") will be created and started automatically. You can
+   confirm it in `services.msc` or with:
+   ```powershell
+   Get-Service -Name "DLP Protector Client"
+   ```
+6. The service is configured for automatic startup with the machine and will restart itself up
+   to 3 times if it crashes.
+
+### Removing the service
+
+Also requires an elevated (Administrator) command prompt:
+
+```bash
+npm run service:uninstall
+```
+
+### Troubleshooting
+
+Installing the service creates a `daemon/` folder (not in git) with a wrapper executable and log
+files (`*.out.log`, `*.err.log`, `*.wrapper.log`) — useful if the service doesn't come up as
+expected. The app's own runtime logs (scans, resolution, response times) continue to be written
+as usual to `logs/requests.log.jsonl` per `LOG_FILE_PATH`.
+
+## Project structure
+
+```
+server.js                # Express app + endpoints POST /api/scan, GET/POST /api/settings
+src/config.js            # Loads configuration from .env (Protector connection)
+src/settingsStore.js     # Safe runtime settings editable via the UI, saved in data/settings.json
+src/protectorClient.js   # Builds and sends the Inspection API request to the Protector
+src/logger.js            # JSON-lines log for every request
+public/index.html        # UI - single page, drag & drop + Settings screen, no build step
+public/docs.html          # Internal API docs (POST /api/scan, GET/POST /api/settings)
+scripts/install-service.js    # Registers as a Windows Service (services.msc) - requires Administrator
+scripts/uninstall-service.js  # Removes the Windows Service
+postman/                 # Postman collection + testing instructions (both against the app and directly against the Protector)
+logs/requests.log.jsonl  # Created automatically - runtime log (timestamp, filename, size, resolution, elapsedMs)
+data/settings.json       # Created automatically - settings saved via the Settings screen
+daemon/                  # Created automatically by node-windows when the service is installed - not in git
+```
+
+## Testing with Postman
+
+See [`postman/README.md`](postman/README.md) — includes a ready-made Postman collection for
+testing the app's own API, plus instructions and example files for testing the Protector
+**directly** (bypassing the app), including the special file-part "wrapping" discovered during
+the integration.
+
+## Security
+
+- All actual communication with the Protector (address, port, token) happens exclusively from
+  the backend via `.env` — never exposed to the frontend/browser.
+- The uploaded file is processed entirely in memory (Multer memory storage) and is never written
+  to disk at any point.
+- There's validation on the maximum file size (`MAX_FILE_SIZE_MB`) before actually sending it to
+  the Protector.

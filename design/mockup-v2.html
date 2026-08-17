@@ -1,0 +1,706 @@
+<title>DLP Scanner Redesign</title>
+<style>
+  :root {
+    --ground: #070f0e;
+    --surface: rgba(19, 32, 29, 0.6);
+    --surface-solid: #13201d;
+    --surface-2: rgba(28, 45, 41, 0.65);
+    --border: rgba(120, 200, 185, 0.14);
+    --border-soft: rgba(120, 200, 185, 0.08);
+    --border-strong: rgba(120, 200, 185, 0.28);
+    --ink: #edf7f4;
+    --ink-muted: #86a49d;
+    --ink-dim: #4c6763;
+    --accent: #45d4f7;
+    --accent-2: #7c5cff;
+    --accent-dim: #1c5568;
+    --pass: #34e0a1;
+    --pass-glow: rgba(52, 224, 161, 0.35);
+    --block: #ff5d6c;
+    --block-glow: rgba(255, 93, 108, 0.4);
+    --warn: #ffc25c;
+    --warn-glow: rgba(255, 194, 92, 0.3);
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--ground);
+    color: var(--ink);
+  }
+  body {
+    position: relative;
+    padding: 48px 24px 90px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 60px;
+    overflow-x: hidden;
+  }
+
+  /* ---------- ambient background ---------- */
+  .aurora {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .aurora::before, .aurora::after {
+    content: "";
+    position: absolute;
+    width: 620px;
+    height: 620px;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.22;
+  }
+  .aurora::before {
+    background: var(--accent);
+    top: -220px;
+    left: -160px;
+    animation: drift1 26s ease-in-out infinite;
+  }
+  .aurora::after {
+    background: var(--accent-2);
+    bottom: -260px;
+    right: -180px;
+    animation: drift2 30s ease-in-out infinite;
+  }
+  @keyframes drift1 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(60px, 40px); }
+  }
+  @keyframes drift2 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-50px, -30px); }
+  }
+  .grid-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--border-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border-soft) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, black 40%, transparent 90%);
+    opacity: 0.5;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .aurora::before, .aurora::after { animation: none; }
+  }
+
+  .review-label {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 880px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: 10px;
+    margin: 0;
+  }
+
+  .frame {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 880px;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 30px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+    background: linear-gradient(155deg, rgba(69,212,247,0.25), rgba(124,92,255,0.18));
+    border: 1px solid var(--border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex-shrink: 0;
+    box-shadow: 0 0 24px -4px rgba(69,212,247,0.35);
+  }
+  .brand-mark svg { width: 20px; height: 20px; stroke: var(--accent); }
+  .brand-text h1 {
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.015em;
+    background: linear-gradient(120deg, var(--ink) 30%, var(--accent) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .brand-text .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-top: 3px;
+  }
+  .pulse-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--pass);
+    box-shadow: 0 0 0 0 var(--pass-glow);
+    animation: pulse 2.2s ease-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 var(--pass-glow); }
+    70% { box-shadow: 0 0 0 7px rgba(52,224,161,0); }
+    100% { box-shadow: 0 0 0 0 rgba(52,224,161,0); }
+  }
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--surface);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color .18s, color .18s, box-shadow .18s;
+  }
+  .icon-btn:hover {
+    border-color: var(--border-strong);
+    color: var(--accent);
+    box-shadow: 0 0 18px -6px rgba(69,212,247,0.5);
+  }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  /* ---------- dropzone ---------- */
+  .dropzone {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    padding: 44px 32px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    overflow: hidden;
+  }
+  .dropzone::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 0%, rgba(69,212,247,0.1) 48%, transparent 100%);
+    transform: translateY(-130%);
+    animation: sweep 3.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dropzone::after { animation: none; display: none; }
+  }
+  @keyframes sweep {
+    0%, 15% { transform: translateY(-130%); }
+    55%, 100% { transform: translateY(130%); }
+  }
+  .dropzone-icon {
+    width: 58px;
+    height: 58px;
+    border-radius: 14px;
+    background: linear-gradient(155deg, rgba(69,212,247,0.16), rgba(124,92,255,0.1));
+    border: 1px solid var(--border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .dropzone-icon svg { width: 26px; height: 26px; stroke: var(--accent); }
+  .dropzone-copy h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 5px;
+    letter-spacing: -0.01em;
+  }
+  .dropzone-copy p {
+    font-size: 13px;
+    color: var(--ink-muted);
+    margin: 0;
+  }
+  .dropzone-copy .limit {
+    font-family: var(--mono);
+    color: var(--ink-dim);
+    font-size: 11.5px;
+    margin-top: 8px;
+    letter-spacing: 0.02em;
+  }
+
+  /* ---------- selected file chip ---------- */
+  .file-row {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--surface);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 13px 18px;
+  }
+  .file-chip { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  .file-type-icon {
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .file-type-icon svg { width: 17px; height: 17px; stroke: var(--ink-muted); }
+  .file-meta { min-width: 0; }
+  .file-meta .name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-meta .size { font-family: var(--mono); font-size: 11.5px; color: var(--ink-muted); margin-top: 1px; }
+  .file-remove {
+    background: none; border: none; color: var(--ink-dim); cursor: pointer;
+    font-size: 15px; padding: 5px 9px; border-radius: 7px; flex-shrink: 0;
+    transition: color .15s, background .15s;
+  }
+  .file-remove:hover { color: var(--block); background: rgba(255,93,108,0.1); }
+
+  .send-row { margin-top: 20px; display: flex; align-items: center; gap: 16px; }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #2ea8d1);
+    color: #04222c;
+    border: none;
+    border-radius: 11px;
+    padding: 12px 24px;
+    font-size: 13.5px;
+    font-weight: 700;
+    font-family: var(--sans);
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 9px;
+    box-shadow: 0 4px 24px -6px rgba(69,212,247,0.55);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px -4px rgba(69,212,247,0.65); }
+  .btn-primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .btn-primary svg { width: 15px; height: 15px; }
+  .progress-track {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    max-width: 220px;
+    position: relative;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 42%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 3px;
+    box-shadow: 0 0 12px 0 rgba(69,212,247,0.6);
+  }
+  .progress-label { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); }
+
+  /* ---------- verdict banner ---------- */
+  .verdict {
+    margin-top: 30px;
+    border-radius: 18px;
+    border: 1px solid rgba(255,93,108,0.3);
+    overflow: hidden;
+    background: var(--surface);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 0 46px -18px var(--block-glow);
+  }
+  .verdict-top {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 22px 24px;
+  }
+  .verdict-stamp {
+    position: relative;
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    border: 2px solid var(--block);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    background: rgba(255,93,108,0.12);
+  }
+  .verdict-stamp::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,93,108,0.35);
+    animation: ring 2.4s ease-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) { .verdict-stamp::before { animation: none; } }
+  @keyframes ring {
+    0% { transform: scale(0.85); opacity: 0.9; }
+    100% { transform: scale(1.35); opacity: 0; }
+  }
+  .verdict-stamp svg { width: 23px; height: 23px; stroke: var(--block); }
+  .verdict-text h3 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    letter-spacing: -0.01em;
+  }
+  .verdict-text .sub { font-size: 12.5px; color: var(--ink-muted); font-family: var(--mono); letter-spacing: 0.02em; }
+  .verdict-actions { margin-left: auto; display: flex; gap: 8px; }
+  .action-pill {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(255,93,108,0.14);
+    color: var(--block);
+    border: 1px solid rgba(255,93,108,0.4);
+  }
+
+  .verdict-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding: 15px 24px;
+    border-top: 1px solid var(--border-soft);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-muted);
+  }
+  .verdict-meta b { color: var(--ink); font-weight: 500; }
+
+  /* ---------- violation cards ---------- */
+  .violations { padding: 4px 24px 22px; display: flex; flex-direction: column; gap: 10px; }
+  .violation-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 17px;
+    position: relative;
+    transition: border-color .15s, transform .15s;
+  }
+  .violation-card:hover { transform: translateX(2px); }
+  .violation-card::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 10px; bottom: 10px;
+    width: 3px;
+    border-radius: 0;
+  }
+  .violation-card.sev-high::before { background: var(--block); box-shadow: 0 0 10px 0 var(--block-glow); }
+  .violation-card.sev-medium::before { background: var(--warn); box-shadow: 0 0 10px 0 var(--warn-glow); }
+  .v-body { flex: 1; min-width: 0; padding-left: 8px; }
+  .v-policy { font-size: 13px; font-weight: 600; }
+  .v-rule { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+  .sev-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .sev-badge.high { background: rgba(255,93,108,0.14); color: var(--block); border: 1px solid rgba(255,93,108,0.3); }
+  .sev-badge.medium { background: rgba(255,194,92,0.14); color: var(--warn); border: 1px solid rgba(255,194,92,0.3); }
+  .v-matches {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink);
+    text-align: right;
+    min-width: 48px;
+    flex-shrink: 0;
+  }
+  .v-matches span { display: block; font-size: 9.5px; font-weight: 400; color: var(--ink-dim); letter-spacing: 0.05em; text-transform: uppercase; }
+
+  /* ---------- settings panel ---------- */
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    padding: 28px;
+  }
+  .panel-head h2 { font-size: 17px; margin: 0 0 7px; letter-spacing: -0.01em; }
+  .panel-head p { font-size: 12.5px; color: var(--ink-muted); margin: 0 0 24px; line-height: 1.6; max-width: 60ch; }
+
+  .panel-group { margin-bottom: 24px; }
+  .panel-group-title {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .group-icon {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .group-icon svg { width: 12px; height: 12px; }
+  .panel-group.limits .group-icon { background: rgba(69,212,247,0.14); }
+  .panel-group.limits .group-icon svg { stroke: var(--accent); }
+  .panel-group.source .group-icon { background: rgba(52,224,161,0.14); }
+  .panel-group.source .group-icon svg { stroke: var(--pass); }
+  .panel-group.destination .group-icon { background: rgba(124,92,255,0.16); }
+  .panel-group.destination .group-icon svg { stroke: var(--accent-2); }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 0;
+  }
+  .field + .field { border-top: 1px solid var(--border-soft); }
+  .field-label { flex: 0 0 200px; font-size: 13px; font-weight: 500; }
+  .field-label .hint { display: block; font-size: 11px; font-weight: 400; color: var(--ink-muted); margin-top: 2px; }
+  .field-input {
+    flex: 1;
+    background: rgba(7,15,14,0.5);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    color: var(--ink);
+    font-size: 13px;
+    font-family: var(--mono);
+    transition: border-color .15s;
+  }
+  .field-input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(69,212,247,0.15); }
+  .field-input::placeholder { color: var(--ink-dim); font-family: var(--sans); }
+  .field.is-off .field-input { opacity: 0.35; }
+  .field.is-off .field-label { opacity: 0.55; }
+
+  .toggle {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    border-radius: 999px;
+    background: rgba(120,200,185,0.16);
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--ink-dim);
+    transition: transform .25s cubic-bezier(0.34, 1.56, 0.64, 1), background .2s;
+  }
+  .toggle.on { background: rgba(69,212,247,0.28); }
+  .toggle.on::after {
+    transform: translateX(18px);
+    background: var(--accent);
+    box-shadow: 0 0 10px 0 rgba(69,212,247,0.7);
+  }
+
+  .annot {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    background: rgba(69,212,247,0.1);
+    border: 1px solid rgba(69,212,247,0.28);
+    border-radius: 6px;
+    padding: 2px 9px;
+    margin-left: 4px;
+  }
+
+  @media (max-width: 640px) {
+    .field { flex-wrap: wrap; }
+    .field-label { flex-basis: 100%; }
+  }
+</style>
+
+<div class="aurora" aria-hidden="true"></div>
+<div class="grid-overlay" aria-hidden="true"></div>
+
+<h2 class="review-label frame" style="font-weight:400">01 — Main scan screen (file selected, blocked result)</h2>
+
+<div class="frame">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>DLP Scanner</h1>
+        <div class="eyebrow"><span class="pulse-dot" aria-hidden="true"></span>Protector connected</div>
+      </div>
+    </div>
+    <button class="icon-btn" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+  </div>
+
+  <div class="dropzone">
+    <div class="dropzone-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    </div>
+    <div class="dropzone-copy">
+      <h2>Drop a file to scan, or click to browse</h2>
+      <p>Checked against your Forcepoint DLP policy before you send it anywhere.</p>
+      <div class="limit">MAX 30MB · TXT, DOCX, XLSX, PDF, ZIP, IMAGES</div>
+    </div>
+  </div>
+
+  <div class="file-row">
+    <div class="file-chip">
+      <div class="file-type-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div class="file-meta">
+        <div class="name">Q3_customer_export.xlsx</div>
+        <div class="size">1.8 MB</div>
+      </div>
+    </div>
+    <button class="file-remove" aria-label="Remove file">✕</button>
+  </div>
+
+  <div class="send-row">
+    <button class="btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Send for scanning
+    </button>
+    <div class="progress-track"><div class="progress-fill"></div></div>
+    <div class="progress-label">scanning…</div>
+  </div>
+
+  <div class="verdict">
+    <div class="verdict-top">
+      <div class="verdict-stamp">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      </div>
+      <div class="verdict-text">
+        <h3>Blocked — policy violation found</h3>
+        <div class="sub">MATCHED · 2 RULES TRIGGERED</div>
+      </div>
+      <div class="verdict-actions"><span class="action-pill">Block</span></div>
+    </div>
+    <div class="verdict-meta">
+      <span>FILE <b>Q3_customer_export.xlsx</b></span>
+      <span>SIZE <b>1.8 MB</b></span>
+      <span>RESPONSE <b>187ms</b></span>
+      <span>REQUEST <b>a29f…7e12</b></span>
+    </div>
+    <div class="violations">
+      <div class="violation-card sev-high">
+        <div class="v-body">
+          <div class="v-policy">PCI — Credit Card Numbers</div>
+          <div class="v-rule">Rule: Card Number Pattern</div>
+        </div>
+        <span class="sev-badge high">High</span>
+        <div class="v-matches">11<span>matches</span></div>
+      </div>
+      <div class="violation-card sev-medium">
+        <div class="v-body">
+          <div class="v-policy">BulwarxTestKeyword</div>
+          <div class="v-rule">Rule: BulwarxTestKeyword</div>
+        </div>
+        <span class="sev-badge medium">Medium</span>
+        <div class="v-matches">1<span>match</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 class="review-label frame" style="font-weight:400">02 — Settings panel (toggle switches, grouped by section)</h2>
+
+<div class="frame panel">
+  <div class="panel-head">
+    <h2>Settings</h2>
+    <p>Scan behavior and request metadata only. Protector connection (host, port, token) is server-side and can't be changed here.</p>
+  </div>
+
+  <div class="panel-group limits">
+    <div class="panel-group-title">
+      <span class="group-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></span>
+      Limits
+    </div>
+    <div class="field">
+      <div class="field-label">Max file size<span class="hint">MAX_FILE_SIZE_MB default</span></div>
+      <div class="toggle on"></div>
+      <input class="field-input" value="30 MB">
+    </div>
+    <div class="field is-off">
+      <div class="field-label">Request timeout<span class="hint">REQUEST_TIMEOUT_MS default</span></div>
+      <div class="toggle"></div>
+      <input class="field-input" value="30 sec" disabled>
+    </div>
+  </div>
+
+  <div class="panel-group source">
+    <div class="panel-group-title">
+      <span class="group-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+      Source <span class="annot">matched against policy Source condition</span>
+    </div>
+    <div class="field">
+      <div class="field-label">Source IP address(es)<span class="hint">source.host_ips</span></div>
+      <div class="toggle on"></div>
+      <input class="field-input" value="10.20.4.51">
+    </div>
+    <div class="field is-off">
+      <div class="field-label">Host name<span class="hint">source.host_name — auto-detected</span></div>
+      <div class="toggle"></div>
+      <input class="field-input" placeholder="auto-detected" disabled>
+    </div>
+  </div>
+
+  <div class="panel-group destination">
+    <div class="panel-group-title">
+      <span class="group-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></span>
+      Destination
+    </div>
+    <div class="field is-off">
+      <div class="field-label">Destination URL<span class="hint">destinations[0].http_request_url</span></div>
+      <div class="toggle"></div>
+      <input class="field-input" placeholder="https://dlp-client.local/upload" disabled>
+    </div>
+  </div>
+</div>

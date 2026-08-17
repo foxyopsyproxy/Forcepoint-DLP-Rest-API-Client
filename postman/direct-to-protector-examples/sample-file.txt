@@ -1,0 +1,1 @@
+This is a sample file for testing the Forcepoint Inspection API directly via Postman.

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DLP Scanner UI Redesign Mockup</title>
+<style>
+  :root {
+    --ground: #0a1412;
+    --surface: #111d1a;
+    --surface-2: #17231f;
+    --border: #223330;
+    --border-soft: #1a2926;
+    --ink: #e8f2ee;
+    --ink-muted: #82a099;
+    --ink-dim: #4f6864;
+    --accent: #38bdf8;
+    --accent-dim: #1b5a70;
+    --pass: #34d399;
+    --pass-bg: #12291f;
+    --block: #f0625c;
+    --block-bg: #2c1512;
+    --warn: #f5b942;
+    --warn-bg: #2a2210;
+    --low: #93a1ce;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--ground);
+    color: var(--ink);
+    padding: 40px 24px 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 56px;
+  }
+
+  /* ---------- shared page chrome ---------- */
+  .review-label {
+    width: 100%;
+    max-width: 860px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: 10px;
+  }
+
+  .frame {
+    width: 100%;
+    max-width: 860px;
+    background: var(--ground);
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: linear-gradient(155deg, var(--accent-dim), var(--surface-2));
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .brand-mark svg { width: 18px; height: 18px; stroke: var(--accent); }
+  .brand-text h1 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .brand-text .eyebrow {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .icon-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
+  .icon-btn svg { width: 17px; height: 17px; }
+
+  /* ---------- dropzone ---------- */
+  .dropzone {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 22px 22px, var(--border-soft) 1px, transparent 1px) 0 0 / 22px 22px,
+      var(--surface);
+    padding: 40px 28px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    overflow: hidden;
+  }
+  .dropzone::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 0%, rgba(56,189,248,0.06) 48%, transparent 100%);
+    transform: translateY(-120%);
+    animation: sweep 3.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes sweep {
+    0%, 15% { transform: translateY(-120%); }
+    55%, 100% { transform: translateY(120%); }
+  }
+  .dropzone-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .dropzone-icon svg { width: 24px; height: 24px; stroke: var(--accent); }
+  .dropzone-copy h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  .dropzone-copy p {
+    font-size: 13px;
+    color: var(--ink-muted);
+    margin: 0;
+  }
+  .dropzone-copy .limit {
+    font-family: var(--mono);
+    color: var(--ink-dim);
+    font-size: 11.5px;
+    margin-top: 6px;
+  }
+
+  /* ---------- selected file chip ---------- */
+  .file-row {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    padding: 12px 16px;
+  }
+  .file-chip { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .file-type-icon {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .file-type-icon svg { width: 16px; height: 16px; stroke: var(--ink-muted); }
+  .file-meta { min-width: 0; }
+  .file-meta .name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-meta .size { font-family: var(--mono); font-size: 11.5px; color: var(--ink-muted); margin-top: 1px; }
+  .file-remove {
+    background: none; border: none; color: var(--ink-dim); cursor: pointer;
+    font-size: 15px; padding: 4px 8px; border-radius: 6px; flex-shrink: 0;
+  }
+  .file-remove:hover { color: var(--block); background: var(--block-bg); }
+
+  .send-row { margin-top: 18px; display: flex; align-items: center; gap: 14px; }
+  .btn-primary {
+    background: var(--accent);
+    color: #04222c;
+    border: none;
+    border-radius: 9px;
+    padding: 11px 22px;
+    font-size: 13.5px;
+    font-weight: 700;
+    font-family: var(--sans);
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .btn-primary svg { width: 15px; height: 15px; }
+  .progress-track {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    max-width: 220px;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 42%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .progress-label { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); }
+
+  /* ---------- verdict banner ---------- */
+  .verdict {
+    margin-top: 28px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .verdict-top {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 22px;
+    border-left: 4px solid var(--block);
+  }
+  .verdict-stamp {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    border: 2px solid var(--block);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    background: var(--block-bg);
+  }
+  .verdict-stamp svg { width: 22px; height: 22px; stroke: var(--block); }
+  .verdict-text h3 {
+    margin: 0 0 3px;
+    font-size: 16px;
+    letter-spacing: -0.01em;
+  }
+  .verdict-text .sub { font-size: 12.5px; color: var(--ink-muted); }
+  .verdict-actions { margin-left: auto; display: flex; gap: 8px; }
+  .action-pill {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: var(--block-bg);
+    color: var(--block);
+    border: 1px solid rgba(240,98,92,0.35);
+  }
+
+  .verdict-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    padding: 14px 22px;
+    border-top: 1px solid var(--border-soft);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-muted);
+  }
+  .verdict-meta b { color: var(--ink); font-weight: 500; }
+
+  /* ---------- violation cards ---------- */
+  .violations { padding: 4px 22px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .violation-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 16px;
+    position: relative;
+  }
+  .violation-card::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 10px; bottom: 10px;
+    width: 3px;
+    border-radius: 2px;
+  }
+  .violation-card.sev-high::before { background: var(--block); }
+  .violation-card.sev-medium::before { background: var(--warn); }
+  .v-body { flex: 1; min-width: 0; padding-left: 8px; }
+  .v-policy { font-size: 13px; font-weight: 600; }
+  .v-rule { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+  .sev-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .sev-badge.high { background: var(--block-bg); color: var(--block); }
+  .sev-badge.medium { background: var(--warn-bg); color: var(--warn); }
+  .v-matches {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+    text-align: right;
+    min-width: 46px;
+    flex-shrink: 0;
+  }
+  .v-matches span { display: block; font-size: 9.5px; color: var(--ink-dim); letter-spacing: 0.05em; text-transform: uppercase; }
+
+  /* ---------- settings panel ---------- */
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 26px;
+  }
+  .panel-head h2 { font-size: 16px; margin: 0 0 6px; }
+  .panel-head p { font-size: 12.5px; color: var(--ink-muted); margin: 0 0 22px; line-height: 1.55; max-width: 60ch; }
+
+  .panel-group { margin-bottom: 22px; }
+  .panel-group-title {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .panel-group-title svg { width: 13px; height: 13px; stroke: var(--ink-dim); }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 11px 0;
+  }
+  .field + .field { border-top: 1px solid var(--border-soft); }
+  .field-label { flex: 0 0 200px; font-size: 13px; font-weight: 500; }
+  .field-label .hint { display: block; font-size: 11px; font-weight: 400; color: var(--ink-muted); margin-top: 2px; }
+  .field-input {
+    flex: 1;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 11px;
+    color: var(--ink);
+    font-size: 13px;
+    font-family: var(--mono);
+  }
+  .field-input::placeholder { color: var(--ink-dim); font-family: var(--sans); }
+  .field.is-off .field-input { opacity: 0.35; }
+  .field.is-off .field-label { opacity: 0.55; }
+
+  .toggle {
+    position: relative;
+    width: 38px;
+    height: 21px;
+    border-radius: 999px;
+    background: var(--border);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 17px; height: 17px;
+    border-radius: 50%;
+    background: var(--ink-dim);
+    transition: transform .15s, background .15s;
+  }
+  .toggle.on { background: var(--accent-dim); }
+  .toggle.on::after { transform: translateX(17px); background: var(--accent); }
+
+  .annot {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    background: rgba(56,189,248,0.08);
+    border: 1px solid rgba(56,189,248,0.25);
+    border-radius: 6px;
+    padding: 2px 8px;
+    margin-left: 8px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="review-label frame">01 — Main scan screen (file selected, blocked result)</div>
+
+  <div class="frame">
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+        </div>
+        <div class="brand-text">
+          <h1>DLP Scanner</h1>
+          <div class="eyebrow">Forcepoint Inspection Client</div>
+        </div>
+      </div>
+      <button class="icon-btn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+    </div>
+
+    <div class="dropzone">
+      <div class="dropzone-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="dropzone-copy">
+        <h2>Drop a file to scan, or click to browse</h2>
+        <p>Checked against your Forcepoint DLP policy before you send it anywhere.</p>
+        <div class="limit">MAX 30MB · TXT, DOCX, XLSX, PDF, ZIP, IMAGES</div>
+      </div>
+    </div>
+
+    <div class="file-row">
+      <div class="file-chip">
+        <div class="file-type-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="file-meta">
+          <div class="name">Q3_customer_export.xlsx</div>
+          <div class="size">1.8 MB</div>
+        </div>
+      </div>
+      <button class="file-remove">✕</button>
+    </div>
+
+    <div class="send-row">
+      <button class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Send for scanning
+      </button>
+      <div class="progress-track"><div class="progress-fill"></div></div>
+      <div class="progress-label">scanning…</div>
+    </div>
+
+    <div class="verdict">
+      <div class="verdict-top">
+        <div class="verdict-stamp">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <div class="verdict-text">
+          <h3>Blocked — policy violation found</h3>
+          <div class="sub">MATCHED · 2 rules triggered</div>
+        </div>
+        <div class="verdict-actions"><span class="action-pill">Block</span></div>
+      </div>
+      <div class="verdict-meta">
+        <span>FILE <b>Q3_customer_export.xlsx</b></span>
+        <span>SIZE <b>1.8 MB</b></span>
+        <span>RESPONSE <b>187ms</b></span>
+        <span>REQUEST <b>a29f…7e12</b></span>
+      </div>
+      <div class="violations">
+        <div class="violation-card sev-high">
+          <div class="v-body">
+            <div class="v-policy">PCI — Credit Card Numbers</div>
+            <div class="v-rule">Rule: Card Number Pattern</div>
+          </div>
+          <span class="sev-badge high">High</span>
+          <div class="v-matches">11<span>matches</span></div>
+        </div>
+        <div class="violation-card sev-medium">
+          <div class="v-body">
+            <div class="v-policy">BulwarxTestKeyword</div>
+            <div class="v-rule">Rule: BulwarxTestKeyword</div>
+          </div>
+          <span class="sev-badge medium">Medium</span>
+          <div class="v-matches">1<span>match</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="review-label frame">02 — Settings panel (toggle switches, grouped by section)</div>
+
+  <div class="frame panel">
+    <div class="panel-head">
+      <h2>Settings</h2>
+      <p>Scan behavior and request metadata only. Protector connection (host, port, token) is server-side and can't be changed here.</p>
+    </div>
+
+    <div class="panel-group">
+      <div class="panel-group-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Limits
+      </div>
+      <div class="field">
+        <div class="field-label">Max file size<span class="hint">MAX_FILE_SIZE_MB default</span></div>
+        <div class="toggle on"></div>
+        <input class="field-input" value="30 MB">
+      </div>
+      <div class="field is-off">
+        <div class="field-label">Request timeout<span class="hint">REQUEST_TIMEOUT_MS default</span></div>
+        <div class="toggle"></div>
+        <input class="field-input" value="30 sec" disabled>
+      </div>
+    </div>
+
+    <div class="panel-group">
+      <div class="panel-group-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Source <span class="annot">matched against policy Source condition</span>
+      </div>
+      <div class="field">
+        <div class="field-label">Source IP address(es)<span class="hint">source.host_ips</span></div>
+        <div class="toggle on"></div>
+        <input class="field-input" value="10.20.4.51">
+      </div>
+      <div class="field is-off">
+        <div class="field-label">Host name<span class="hint">source.host_name — auto-detected</span></div>
+        <div class="toggle"></div>
+        <input class="field-input" placeholder="auto-detected" disabled>
+      </div>
+    </div>
+
+    <div class="panel-group">
+      <div class="panel-group-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+        Destination
+      </div>
+      <div class="field is-off">
+        <div class="field-label">Destination URL<span class="hint">destinations[0].http_request_url</span></div>
+        <div class="toggle"></div>
+        <input class="field-input" placeholder="https://dlp-client.local/upload" disabled>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
