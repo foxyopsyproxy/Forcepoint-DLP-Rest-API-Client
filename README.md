@@ -75,6 +75,9 @@ npm start
 The server listens on `http://localhost:3000` (or whatever port `PORT` is set to). Open that
 address in a browser, drag a file (or click to choose one), and click "Send for Scanning".
 
+`GET /api/health` reports whether the server is up and whether the Protector is currently
+reachable — useful for monitoring or for the Windows Service setup below.
+
 ## Installing as a Windows Service (services.msc)
 
 To move the app to another machine and run it as a Windows Service (shows up in `services.msc`,
@@ -124,7 +127,7 @@ as usual to `logs/requests.log.jsonl` per `LOG_FILE_PATH`.
 ## Project structure
 
 ```
-server.js                # Express app + endpoints POST /api/scan, GET/POST /api/settings
+server.js                # Express app + endpoints GET /api/health, POST /api/scan, GET/POST /api/settings
 src/config.js            # Loads configuration from .env (Protector connection)
 src/settingsStore.js     # Safe runtime settings editable via the UI, saved in data/settings.json
 src/protectorClient.js   # Builds and sends the Inspection API request to the Protector
@@ -145,6 +148,12 @@ See [`postman/README.md`](postman/README.md) — includes a ready-made Postman c
 testing the app's own API, plus instructions and example files for testing the Protector
 **directly** (bypassing the app), including the special file-part "wrapping" discovered during
 the integration.
+
+For a quicker option with no Postman setup at all, the in-app docs at `/docs` (the
+"Documentation" button in the UI) include an interactive "Try it out" panel under **Direct to
+Protector** — write your own raw metadata JSON, pick a file, and send it straight to the
+Protector from the browser (still routed through this app's backend, so the Protector's
+host/port/token stay hidden).
 
 ## Security
 

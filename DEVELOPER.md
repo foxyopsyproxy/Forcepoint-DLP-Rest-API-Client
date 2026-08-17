@@ -34,7 +34,7 @@ Key files:
 
 | File | Role |
 |---|---|
-| `server.js` | Express routes: `POST /api/scan`, `GET/POST /api/settings`, `GET /docs` |
+| `server.js` | Express routes: `GET /api/health`, `POST /api/scan`, `GET/POST /api/settings`, `GET /docs` |
 | `src/config.js` | Protector connection config from `.env` (host/port/protocol/token/TLS) |
 | `src/settingsStore.js` | Runtime settings editable via the UI (saved in `data/settings.json`) |
 | `src/protectorClient.js` | **Builds the actual request to the Protector** and sends it — see section 3 |
@@ -47,6 +47,25 @@ Key files:
 This is our backend's own internal API (not the Protector's). Identical interactive
 documentation also exists inside the app itself at `/docs` (the "Documentation" button in the
 UI).
+
+### `GET /api/health`
+
+Server liveness plus a quick reachability check against the Protector — no real inspection
+request is sent, just a TCP connect to the configured host/port with a 3s timeout.
+
+**Example response (200)**:
+```json
+{
+  "status": "ok",
+  "uptimeSeconds": 3600,
+  "timestamp": "2026-08-17T20:29:36.751Z",
+  "protector": { "reachable": true, "checkedInMs": 11 }
+}
+```
+
+Always responds `200` — check `protector.reachable` (and the `error` field, e.g.
+`"ECONNREFUSED"`, when it's `false`), not the HTTP status. The Protector's host/port are never
+included in the response, same as everywhere else in this app.
 
 ### `POST /api/scan`
 
@@ -78,6 +97,24 @@ Scans a file against the Protector and returns the result.
 
 **Error codes**: `400` (no file sent), `413` (exceeds max size), `502` (Protector unavailable/
 error), `504` (timeout).
+
+### `POST /api/protector/raw` — bypass this app's scan logic
+
+A "Try it out" style passthrough for developers, also available interactively in `/docs`. Still
+goes through this backend (the Protector's host/port/token are never exposed to the browser), but
+skips this app's own metadata construction (Settings, source auto-detection, response reshaping)
+entirely — you supply the raw metadata yourself and get back the Protector's raw response
+unprocessed.
+
+**Body**: `multipart/form-data`:
+- `metadata` (text) — raw JSON string, not built by this app
+- `file` (binary)
+- `wrap` (text, optional) — `"true"` (default) or `"false"`. Set false to send the file's raw
+  bytes instead of the HTTP-wrapped envelope — a quick way to reproduce the "always 0 matches"
+  gotcha from section 3 live, without editing any code.
+
+Response is the Protector's exact JSON body, unmodified (snake_case fields, `cpe_transaction_info`,
+etc.) — mirrored with the same HTTP status the Protector returned.
 
 ### `GET /api/settings`
 

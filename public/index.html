@@ -6,20 +6,23 @@
 <title>Forcepoint DLP Protector File Scanner</title>
 <style>
   :root {
-    --ground: #0a1412;
-    --surface: #111d1a;
-    --surface-2: #17231f;
+    --ground: #060b0a;
+    --surface: #101c19;
+    --surface-2: #17251f;
+    --glass: rgba(17, 29, 26, 0.62);
     --border: #223330;
     --border-soft: #1a2926;
-    --ink: #e8f2ee;
-    --ink-muted: #82a099;
-    --ink-dim: #4f6864;
+    --ink: #eef6f2;
+    --ink-muted: #8aa8a0;
+    --ink-dim: #52706a;
     --accent: #38bdf8;
-    --accent-hover: #57c7fa;
+    --accent-hover: #63d3ff;
     --accent-dim: #1b5a70;
+    --accent-2: #a78bfa;
+    --accent-3: #34e0b0;
     --pass: #34d399;
     --pass-bg: #12291f;
-    --block: #f0625c;
+    --block: #fb6a63;
     --block-bg: #2c1512;
     --warn: #f5b942;
     --warn-bg: #2a2210;
@@ -28,309 +31,264 @@
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
-  html, body {
-    margin: 0;
-    font-family: var(--sans);
-    background: var(--ground);
-    color: var(--ink);
-  }
+  html, body { margin: 0; font-family: var(--sans); background: var(--ground); color: var(--ink); }
   body {
     min-height: 100vh;
-    padding: 64px 24px 120px;
+    padding: 64px 24px 140px;
     display: flex;
     justify-content: center;
-  }
-  .container {
-    width: 100%;
-    max-width: 880px;
+    position: relative;
+    overflow-x: hidden;
   }
 
+  /* ---------- ambient aurora background ---------- */
+  .aurora { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: 0.28;
+    will-change: transform;
+  }
+  .blob-a { width: 620px; height: 620px; background: var(--accent); top: -220px; left: -160px; animation: drift-a 26s ease-in-out infinite; }
+  .blob-b { width: 560px; height: 560px; background: var(--accent-2); bottom: -240px; right: -140px; animation: drift-b 32s ease-in-out infinite; }
+  .blob-c { width: 420px; height: 420px; background: var(--accent-3); top: 40%; left: 50%; opacity: 0.16; animation: drift-c 38s ease-in-out infinite; }
+  @keyframes drift-a { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(80px,60px) scale(1.08); } }
+  @keyframes drift-b { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-70px,-50px) scale(1.05); } }
+  @keyframes drift-c { 0%,100% { transform: translate(-50%,-50%) scale(1); } 50% { transform: translate(-45%,-55%) scale(1.15); } }
+  .grain {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.035) 1px, transparent 0);
+    background-size: 28px 28px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .blob { animation: none !important; }
+  }
+
+  .container { width: 100%; max-width: 920px; position: relative; z-index: 1; animation: rise .7s cubic-bezier(.16,1,.3,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
   /* ---------- top bar ---------- */
-  .top-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 34px;
-  }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    min-width: 0;
-  }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
   .brand-mark {
-    width: 44px;
-    height: 44px;
-    border-radius: 11px;
-    background: var(--surface-2);
+    position: relative;
+    width: 50px; height: 50px; border-radius: 14px;
+    background: linear-gradient(155deg, var(--surface-2), var(--surface));
     border: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .brand-mark svg { width: 22px; height: 22px; stroke: var(--accent); }
+  .brand-mark::before {
+    content: ""; position: absolute; inset: -6px; border-radius: 18px;
+    background: radial-gradient(circle, rgba(56,189,248,0.35), transparent 70%);
+    animation: pulse-ring 3.4s ease-in-out infinite;
+  }
+  @keyframes pulse-ring { 0%,100% { opacity: .35; transform: scale(0.94); } 50% { opacity: .8; transform: scale(1.06); } }
+  .brand-mark svg { width: 24px; height: 24px; stroke: var(--accent); position: relative; z-index: 1; }
   h1 {
-    font-size: 23px;
-    font-weight: 600;
-    margin: 0;
-    letter-spacing: -0.01em;
+    font-size: 25px; font-weight: 700; margin: 0; letter-spacing: -0.015em;
+    background: linear-gradient(100deg, var(--ink) 40%, var(--accent) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .subtitle {
-    font-family: var(--mono);
-    font-size: 11.5px;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-top: 4px;
-  }
-  .settings-btn {
-    flex-shrink: 0;
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--ink-muted);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 18px;
-    transition: border-color .15s, color .15s;
-  }
-  .settings-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
-  .settings-btn:active { transform: rotate(30deg); }
+  .subtitle { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-muted); margin-top: 5px; }
+
   .top-bar-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-  .docs-link {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 44px;
-    padding: 0 18px;
-    border-radius: 10px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--ink-muted);
-    font-size: 14px;
-    text-decoration: none;
-    transition: border-color .15s, color .15s;
+  .health-badge {
+    display: flex; align-items: center; gap: 8px;
+    height: 44px; padding: 0 16px; border-radius: 10px;
+    background: var(--glass); border: 1px solid var(--border); backdrop-filter: blur(8px);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-muted);
+    transition: color .2s;
   }
-  .docs-link:hover { border-color: var(--accent-dim); color: var(--accent); }
+  .health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-dim); flex-shrink: 0; transition: background .2s; }
+  .health-badge.online .health-dot { background: var(--pass); box-shadow: 0 0 0 0 rgba(52,211,153,.6); animation: dot-pulse 2s infinite; }
+  .health-badge.online { color: var(--pass); }
+  .health-badge.offline .health-dot { background: var(--block); }
+  .health-badge.offline { color: var(--block); }
+  @keyframes dot-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(52,211,153,.55); }
+    70% { box-shadow: 0 0 0 7px rgba(52,211,153,0); }
+    100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+  }
+  .settings-btn, .docs-link {
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 8px;
+    height: 44px; border-radius: 10px;
+    background: var(--glass); border: 1px solid var(--border); backdrop-filter: blur(8px);
+    color: var(--ink-muted); cursor: pointer; font-size: 14px; text-decoration: none;
+    transition: border-color .18s, color .18s, transform .18s;
+  }
+  .settings-btn { width: 44px; font-size: 18px; }
+  .docs-link { padding: 0 18px; }
+  .settings-btn:hover, .docs-link:hover { border-color: var(--accent-dim); color: var(--accent); transform: translateY(-1px); }
+  .settings-btn:active { transform: rotate(35deg) scale(0.95); }
+  .settings-btn:focus-visible, .docs-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .docs-link svg { width: 16px; height: 16px; flex-shrink: 0; }
 
   /* ---------- dropzone ---------- */
+  .dropzone-wrap { position: relative; border-radius: 22px; }
+
   .dropzone {
     position: relative;
+    border-radius: 20px;
     border: 1px solid var(--border);
-    border-radius: 16px;
-    background:
-      radial-gradient(circle at 22px 22px, var(--border-soft) 1px, transparent 1px) 0 0 / 22px 22px,
-      var(--surface);
-    padding: 60px 40px;
-    display: flex;
-    align-items: center;
-    gap: 26px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: border-color .15s;
+    background: var(--glass);
+    backdrop-filter: blur(18px);
+    padding: 68px 44px;
+    display: flex; align-items: center; gap: 30px;
+    overflow: hidden; cursor: pointer;
+    transition: transform .25s cubic-bezier(.16,1,.3,1), border-color .25s, box-shadow .25s;
   }
-  .dropzone.dragover { border-color: var(--accent); }
-  .dropzone::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, transparent 0%, rgba(56,189,248,0.06) 48%, transparent 100%);
-    transform: translateY(-120%);
-    animation: sweep 3.2s ease-in-out infinite;
-    pointer-events: none;
+  .dropzone:hover { border-color: var(--accent-dim); }
+  .dropzone:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .dropzone-wrap.dragover .dropzone {
+    transform: scale(1.012);
+    border-color: var(--accent-dim);
+    box-shadow: 0 0 0 3px rgba(56,189,248,0.18), 0 0 40px -10px rgba(56,189,248,0.35);
   }
-  @media (prefers-reduced-motion: reduce) {
-    .dropzone::after { animation: none; display: none; }
-  }
-  @keyframes sweep {
-    0%, 15% { transform: translateY(-120%); }
-    55%, 100% { transform: translateY(120%); }
-  }
+
   .dropzone-icon {
-    width: 64px;
-    height: 64px;
-    border-radius: 14px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+    position: relative;
+    width: 74px; height: 74px; border-radius: 18px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    animation: float-icon 4.5s ease-in-out infinite;
   }
-  .dropzone-icon svg { width: 30px; height: 30px; stroke: var(--accent); }
-  .dropzone-copy h2 {
-    font-size: 18px;
-    font-weight: 600;
-    margin: 0 0 6px;
+  @keyframes float-icon { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+  .dropzone-icon::before {
+    content: ""; position: absolute; inset: -14px; border-radius: 26px;
+    background: radial-gradient(circle, rgba(56,189,248,0.25), transparent 72%);
   }
-  .dropzone-copy p {
-    font-size: 14.5px;
-    color: var(--ink-muted);
-    margin: 0;
-  }
-  .dropzone-copy .hint {
-    font-family: var(--mono);
-    color: var(--ink-dim);
-    font-size: 12px;
-    margin-top: 8px;
-  }
+  .dropzone-icon svg { width: 34px; height: 34px; stroke: var(--accent); position: relative; z-index: 1; }
+  .dropzone-copy h2 { font-size: 20px; font-weight: 700; margin: 0 0 7px; letter-spacing: -0.01em; }
+  .dropzone-copy p { font-size: 14.5px; color: var(--ink-muted); margin: 0; }
+  .dropzone-copy .hint { font-family: var(--mono); color: var(--ink-dim); font-size: 12px; margin-top: 10px; }
   #fileInput { display: none; }
 
   /* ---------- selected file chip ---------- */
   .selected-file {
-    margin-top: 18px;
-    display: none;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px 20px;
+    margin-top: 18px; display: none; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--glass); border: 1px solid var(--border); backdrop-filter: blur(12px);
+    border-radius: 14px; padding: 16px 20px;
+    animation: rise .3s cubic-bezier(.16,1,.3,1) both;
   }
   .selected-file.visible { display: flex; }
+  .selected-file.invalid { border-color: #4d2320; }
   .file-chip { display: flex; align-items: center; gap: 14px; min-width: 0; }
   .file-type-icon {
-    width: 40px; height: 40px;
-    border-radius: 9px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
+    width: 40px; height: 40px; border-radius: 10px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .file-type-icon svg { width: 19px; height: 19px; stroke: var(--ink-muted); }
+  .file-type-icon svg { width: 19px; height: 19px; stroke: var(--accent); }
   .file-meta { min-width: 0; }
   .file-meta .name { font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .file-meta .size { font-family: var(--mono); font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
-  .remove-btn {
-    background: none; border: none; color: var(--ink-dim); cursor: pointer;
-    font-size: 16px; padding: 5px 9px; border-radius: 7px; flex-shrink: 0;
-  }
+  .selected-file.invalid .file-meta .size { color: var(--block); }
+  .remove-btn { background: none; border: none; color: var(--ink-dim); cursor: pointer; font-size: 16px; padding: 5px 9px; border-radius: 7px; flex-shrink: 0; transition: all .15s; }
   .remove-btn:hover { color: var(--block); background: var(--block-bg); }
+  .remove-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   /* ---------- send row ---------- */
-  .actions { margin-top: 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .actions { margin-top: 26px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; min-height: 50px; }
   button.send {
-    background: var(--accent);
-    color: #04222c;
-    border: none;
-    border-radius: 10px;
-    padding: 14px 28px;
-    font-size: 14.5px;
-    font-weight: 700;
-    font-family: var(--sans);
-    letter-spacing: 0.01em;
-    cursor: pointer;
-    display: flex; align-items: center; gap: 9px;
-    transition: background .15s;
-  }
-  button.send:hover:not(:disabled) { background: var(--accent-hover); }
-  button.send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button.send:disabled { opacity: 0.4; cursor: not-allowed; }
-  button.send svg { width: 16px; height: 16px; }
-  .progress-track {
     position: relative;
-    display: none;
-    flex: 1;
-    height: 3px;
-    background: var(--border);
-    border-radius: 2px;
-    overflow: hidden;
-    max-width: 200px;
+    background: linear-gradient(135deg, var(--accent), #4fd6e0);
+    color: #04222c; border: none; border-radius: 12px;
+    padding: 15px 30px; font-size: 14.5px; font-weight: 700; font-family: var(--sans);
+    letter-spacing: 0.01em; cursor: pointer;
+    display: flex; align-items: center; gap: 9px;
+    box-shadow: 0 8px 24px -8px rgba(56,189,248,0.55);
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s;
   }
-  .progress-track.active { display: block; }
-  .progress-fill {
-    position: absolute;
-    top: 0; left: -35%;
-    height: 100%;
-    width: 35%;
-    border-radius: 2px;
-    background: var(--accent);
-    animation: indeterminate 1.3s ease-in-out infinite;
+  button.send:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 28px -6px rgba(56,189,248,0.7); }
+  button.send:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+  button.send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.send:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+  button.send svg { width: 16px; height: 16px; }
+
+  /* ---------- radar scanning visual ---------- */
+  .scan-visual { display: none; align-items: center; gap: 14px; }
+  .scan-visual.active { display: flex; }
+  .radar {
+    position: relative; width: 30px; height: 30px; border-radius: 50%;
+    border: 2px solid var(--border-soft); flex-shrink: 0;
   }
-  @media (prefers-reduced-motion: reduce) { .progress-fill { animation: none; left: 0; } }
-  @keyframes indeterminate {
-    0% { left: -35%; }
-    100% { left: 100%; }
+  .radar::before {
+    content: ""; position: absolute; inset: -2px; border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--accent), transparent 55%);
+    animation: radar-spin 1s linear infinite;
+    mask: radial-gradient(circle, transparent 58%, #000 60%);
+    -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
   }
-  .status-text { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); }
+  @keyframes radar-spin { to { transform: rotate(360deg); } }
+  .scan-status { font-family: var(--mono); font-size: 12px; color: var(--ink-muted); min-width: 220px; }
+  @media (prefers-reduced-motion: reduce) { .radar::before { animation: none; } }
 
   /* ---------- result: verdict card ---------- */
-  #result { margin-top: 32px; }
+  #result { margin-top: 34px; }
   .verdict {
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-    background: var(--surface);
+    position: relative;
+    border-radius: 20px; border: 1px solid var(--border); overflow: hidden;
+    background: var(--glass); backdrop-filter: blur(16px);
+    animation: pop-in .5s cubic-bezier(.2,1.4,.4,1) both;
   }
-  .verdict-top { display: flex; align-items: center; gap: 20px; padding: 26px 28px; }
+  @keyframes pop-in { 0% { opacity: 0; transform: scale(0.96) translateY(8px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+  .verdict-top { display: flex; align-items: center; gap: 22px; padding: 28px 30px; }
   .v-pass .verdict-top { border-left: 4px solid var(--pass); }
   .v-warn .verdict-top { border-left: 4px solid var(--warn); }
   .v-block .verdict-top { border-left: 4px solid var(--block); }
   .verdict-stamp {
-    width: 54px; height: 54px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
+    position: relative; width: 58px; height: 58px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
+  .verdict-stamp::before { content: ""; position: absolute; inset: -8px; border-radius: 50%; opacity: .5; }
   .v-pass .verdict-stamp { border: 2px solid var(--pass); background: var(--pass-bg); }
+  .v-pass .verdict-stamp::before { background: radial-gradient(circle, rgba(52,211,153,0.4), transparent 70%); animation: glow-pulse 2.2s ease-in-out infinite; }
   .v-pass .verdict-stamp svg { stroke: var(--pass); }
   .v-warn .verdict-stamp { border: 2px solid var(--warn); background: var(--warn-bg); }
+  .v-warn .verdict-stamp::before { background: radial-gradient(circle, rgba(245,185,66,0.4), transparent 70%); animation: glow-pulse 2.2s ease-in-out infinite; }
   .v-warn .verdict-stamp svg { stroke: var(--warn); }
-  .v-block .verdict-stamp { border: 2px solid var(--block); background: var(--block-bg); }
+  .v-block .verdict-stamp { border: 2px solid var(--block); background: var(--block-bg); animation: shake .5s cubic-bezier(.36,.07,.19,.97) both; }
+  .v-block .verdict-stamp::before { background: radial-gradient(circle, rgba(251,106,99,0.45), transparent 70%); animation: glow-pulse 1.6s ease-in-out infinite; }
   .v-block .verdict-stamp svg { stroke: var(--block); }
-  .verdict-stamp svg { width: 26px; height: 26px; }
-  .verdict-text h3 { margin: 0 0 4px; font-size: 19px; letter-spacing: -0.01em; }
+  @keyframes glow-pulse { 0%,100% { opacity: .35; transform: scale(0.92); } 50% { opacity: .75; transform: scale(1.08); } }
+  @keyframes shake { 10%,90% { transform: translateX(-1px); } 20%,80% { transform: translateX(2px); } 30%,50%,70% { transform: translateX(-3px); } 40%,60% { transform: translateX(3px); } }
+  .verdict-stamp svg { width: 27px; height: 27px; position: relative; z-index: 1; }
+  .verdict-text h3 { margin: 0 0 5px; font-size: 20px; letter-spacing: -0.01em; font-weight: 700; }
   .verdict-text .sub { font-size: 13.5px; color: var(--ink-muted); font-family: var(--mono); }
   .verdict-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-  .action-pill {
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 6px 12px;
-    border-radius: 999px;
-    white-space: nowrap;
-  }
+  .action-pill { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
   .v-pass .action-pill { background: var(--pass-bg); color: var(--pass); border: 1px solid #1d4d2c; }
   .v-warn .action-pill { background: var(--warn-bg); color: var(--warn); border: 1px solid #4d3a1d; }
   .v-block .action-pill { background: var(--block-bg); color: var(--block); border: 1px solid #4d1d1d; }
 
   .verdict-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 26px;
-    padding: 17px 28px;
+    display: flex; flex-wrap: wrap; gap: 10px 26px; padding: 18px 30px;
     border-top: 1px solid var(--border-soft);
-    font-family: var(--mono);
-    font-size: 12.5px;
-    color: var(--ink-muted);
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-muted);
   }
   .verdict-meta b { color: var(--ink); font-weight: 500; }
+  .copy-btn {
+    background: none; border: none; color: var(--ink-dim); cursor: pointer;
+    padding: 2px 4px; margin-left: 2px; border-radius: 5px; vertical-align: -3px;
+    display: inline-flex; transition: color .15s, background .15s;
+  }
+  .copy-btn:hover { color: var(--accent); background: var(--surface-2); }
+  .copy-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .copy-btn svg { width: 13px; height: 13px; }
+  .copy-btn .icon-check { display: none; stroke: var(--pass); }
+  .copy-btn.copied .icon-copy { display: none; }
+  .copy-btn.copied .icon-check { display: inline-flex; }
 
-  .violations { padding: 6px 28px 26px; display: flex; flex-direction: column; gap: 12px; }
+  .violations { padding: 6px 30px 28px; display: flex; flex-direction: column; gap: 12px; }
   .violation-card {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 11px;
-    padding: 16px 20px;
-    position: relative;
+    display: flex; align-items: center; gap: 16px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 13px; padding: 16px 20px; position: relative;
+    transition: transform .15s;
   }
-  .violation-card::before {
-    content: "";
-    position: absolute;
-    left: 0; top: 10px; bottom: 10px;
-    width: 3px;
-  }
+  .violation-card:hover { transform: translateX(2px); }
+  .violation-card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; }
   .violation-card.sev-high::before { background: var(--block); }
   .violation-card.sev-medium::before { background: var(--warn); }
   .violation-card.sev-low::before { background: var(--low); }
@@ -338,37 +296,18 @@
   .v-body { flex: 1; min-width: 0; padding-left: 10px; }
   .v-policy { font-size: 14.5px; font-weight: 600; }
   .v-rule { font-size: 13px; color: var(--ink-muted); margin-top: 3px; }
-  .sev-badge {
-    font-family: var(--mono);
-    font-size: 10.5px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    padding: 5px 10px;
-    border-radius: 999px;
-    flex-shrink: 0;
-  }
+  .sev-badge { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; flex-shrink: 0; }
   .sev-badge.high { background: var(--block); color: #fff; }
   .sev-badge.medium { background: var(--warn); color: #2b2100; }
   .sev-badge.low { background: var(--low); color: #131a33; }
   .sev-badge.unknown { background: var(--ink-dim); color: #fff; }
-  .v-matches {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--ink);
-    text-align: right;
-    min-width: 50px;
-    flex-shrink: 0;
-  }
+  .v-matches { font-family: var(--mono); font-size: 13px; color: var(--ink); text-align: right; min-width: 50px; flex-shrink: 0; }
   .v-matches span { display: block; font-size: 10px; color: var(--ink-dim); letter-spacing: 0.05em; text-transform: uppercase; }
 
   .error-card {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    border-radius: 14px;
-    border: 1px solid #4d3a1d;
-    background: var(--surface);
-    padding: 18px 22px;
+    display: flex; align-items: center; gap: 14px; border-radius: 16px;
+    border: 1px solid #4d3a1d; background: var(--glass); backdrop-filter: blur(12px);
+    padding: 18px 22px; animation: pop-in .4s cubic-bezier(.2,1.4,.4,1) both;
   }
   .error-card .verdict-stamp { border: 2px solid var(--warn); background: var(--warn-bg); width: 40px; height: 40px; }
   .error-card .verdict-stamp svg { stroke: var(--warn); width: 20px; height: 20px; }
@@ -379,24 +318,28 @@
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.6);
     align-items: center;
     justify-content: center;
     padding: 20px;
     z-index: 100;
+    backdrop-filter: blur(4px);
   }
   .modal-backdrop.visible { display: flex; }
   .modal-panel {
-    background: var(--surface);
+    background: var(--glass);
+    backdrop-filter: blur(22px);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 16px;
     width: 100%;
     max-width: 480px;
     max-height: 90vh;
     overflow-y: auto;
-    padding: 24px;
+    padding: 26px;
+    animation: pop-in .3s cubic-bezier(.2,1.4,.4,1) both;
   }
-  .modal-panel h2 { font-size: 16px; margin: 0 0 6px; }
+  .modal-panel:focus { outline: none; }
+  .modal-panel h2 { font-size: 17px; margin: 0 0 6px; font-weight: 700; }
   .modal-panel .modal-subtitle { color: var(--ink-muted); font-size: 12.5px; margin-bottom: 20px; line-height: 1.55; }
 
   .panel-group { margin-bottom: 22px; }
@@ -497,8 +440,10 @@
     padding: 9px 20px;
     font-size: 14px;
     cursor: pointer;
+    transition: background .15s;
   }
   button.secondary:hover { background: var(--surface-2); }
+  button.secondary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .settings-status { font-size: 13px; color: var(--ink-muted); font-family: var(--mono); }
   .settings-status.success { color: var(--pass); }
   .settings-status.error { color: var(--block); }
@@ -506,10 +451,14 @@
   @media (max-width: 640px) {
     .verdict-actions { margin-left: 0; justify-content: flex-start; width: 100%; }
     .verdict-top { flex-wrap: wrap; }
+    .dropzone { flex-direction: column; text-align: center; padding: 44px 26px; }
   }
 </style>
 </head>
 <body>
+<div class="aurora"><div class="blob blob-a"></div><div class="blob blob-b"></div><div class="blob blob-c"></div></div>
+<div class="grain"></div>
+
 <div class="container">
   <div class="top-bar">
     <div class="brand">
@@ -522,6 +471,10 @@
       </div>
     </div>
     <div class="top-bar-actions">
+      <div class="health-badge" id="healthBadge">
+        <span class="health-dot"></span>
+        <span id="healthText">Checking Protector…</span>
+      </div>
       <a class="docs-link" href="/docs">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
         Documentation
@@ -530,21 +483,23 @@
     </div>
   </div>
 
-  <div class="dropzone" id="dropzone">
-    <div class="dropzone-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+  <div class="dropzone-wrap" id="dropzoneWrap">
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload a file to scan. Drag and drop a file here, or press Enter to browse.">
+      <div class="dropzone-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <div class="dropzone-copy">
+        <h2>Drag a file here, or click to browse</h2>
+        <p>Checked against your Forcepoint DLP policy before you send it anywhere.</p>
+        <div class="hint">MAXIMUM SIZE: <span id="maxSizeHint">30MB</span></div>
+      </div>
+      <input type="file" id="fileInput">
     </div>
-    <div class="dropzone-copy">
-      <h2>Drag a file here, or click to browse</h2>
-      <p>Checked against your Forcepoint DLP policy before you send it anywhere.</p>
-      <div class="hint">MAXIMUM SIZE: <span id="maxSizeHint">30MB</span></div>
-    </div>
-    <input type="file" id="fileInput">
   </div>
 
   <div class="selected-file" id="selectedFile">
     <div class="file-chip">
-      <div class="file-type-icon">
+      <div class="file-type-icon" id="fileTypeIcon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
       </div>
       <div class="file-meta">
@@ -560,16 +515,18 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       Send for Scanning
     </button>
-    <div class="progress-track" id="progressTrack"><div class="progress-fill"></div></div>
-    <div class="status-text" id="statusText"></div>
+    <div class="scan-visual" id="scanVisual">
+      <div class="radar"></div>
+      <div class="scan-status" id="scanStatus">Uploading file…</div>
+    </div>
   </div>
 
   <div id="result"></div>
 </div>
 
 <div class="modal-backdrop" id="settingsBackdrop">
-  <div class="modal-panel">
-    <h2>Settings</h2>
+  <div class="modal-panel" id="settingsPanel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1">
+    <h2 id="settingsTitle">Settings</h2>
     <div class="modal-subtitle">These only affect scan behavior and request metadata — Protector connection settings (host/port/token) are configured server-side and can't be changed here.</div>
 
     <div class="panel-group limits">
@@ -662,18 +619,21 @@
 </div>
 
 <script>
+  const dropzoneWrap = document.getElementById('dropzoneWrap');
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');
   const selectedFileEl = document.getElementById('selectedFile');
   const fileNameEl = document.getElementById('fileName');
   const fileSizeEl = document.getElementById('fileSize');
+  const fileTypeIconEl = document.getElementById('fileTypeIcon');
   const removeFileBtn = document.getElementById('removeFile');
   const sendBtn = document.getElementById('sendBtn');
-  const progressTrack = document.getElementById('progressTrack');
-  const statusText = document.getElementById('statusText');
+  const scanVisual = document.getElementById('scanVisual');
+  const scanStatus = document.getElementById('scanStatus');
   const resultEl = document.getElementById('result');
 
   let selectedFile = null;
+  let effectiveMaxFileSizeMb = null;
 
   function formatBytes(bytes) {
     if (bytes < 1024) return bytes + ' B';
@@ -681,24 +641,59 @@
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   }
 
+  const FILE_ICONS = {
+    image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
+    spreadsheet: '<path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/>',
+    presentation: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+    archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a2 2 0 002 2h10a2 2 0 002-2V8"/><line x1="10" y1="12" x2="14" y2="12"/>',
+    document: '<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+  };
+  const EXT_TO_ICON = {
+    png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', svg: 'image',
+    xls: 'spreadsheet', xlsx: 'spreadsheet', csv: 'spreadsheet',
+    ppt: 'presentation', pptx: 'presentation',
+    zip: 'archive', rar: 'archive', '7z': 'archive', gz: 'archive', tar: 'archive',
+  };
+
+  function getFileIconSvg(fileName) {
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    const key = EXT_TO_ICON[ext] || 'document';
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${FILE_ICONS[key]}</svg>`;
+  }
+
   function setFile(file) {
     selectedFile = file;
     fileNameEl.textContent = file.name;
     fileSizeEl.textContent = formatBytes(file.size);
+    fileTypeIconEl.innerHTML = getFileIconSvg(file.name);
     selectedFileEl.classList.add('visible');
-    sendBtn.disabled = false;
     resultEl.innerHTML = '';
-    statusText.textContent = '';
+
+    const tooLarge = effectiveMaxFileSizeMb && file.size > effectiveMaxFileSizeMb * 1024 * 1024;
+    selectedFileEl.classList.toggle('invalid', !!tooLarge);
+    if (tooLarge) {
+      sendBtn.disabled = true;
+      renderError(`This file is ${formatBytes(file.size)}, which exceeds the maximum allowed size (${effectiveMaxFileSizeMb}MB).`);
+    } else {
+      sendBtn.disabled = false;
+    }
   }
 
   function clearFile() {
     selectedFile = null;
     fileInput.value = '';
     selectedFileEl.classList.remove('visible');
+    selectedFileEl.classList.remove('invalid');
     sendBtn.disabled = true;
   }
 
   dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
   fileInput.addEventListener('change', () => {
     if (fileInput.files.length) setFile(fileInput.files[0]);
   });
@@ -707,14 +702,14 @@
     dropzone.addEventListener(evt, (e) => {
       e.preventDefault();
       e.stopPropagation();
-      dropzone.classList.add('dragover');
+      dropzoneWrap.classList.add('dragover');
     });
   });
   ['dragleave', 'drop'].forEach((evt) => {
     dropzone.addEventListener(evt, (e) => {
       e.preventDefault();
       e.stopPropagation();
-      dropzone.classList.remove('dragover');
+      dropzoneWrap.classList.remove('dragover');
     });
   });
   dropzone.addEventListener('drop', (e) => {
@@ -781,7 +776,10 @@
       <span>FILE <b>${escapeHtml(data.fileName)}</b></span>
       <span>SIZE <b>${formatBytes(data.fileSizeBytes)}</b></span>
       <span>RESPONSE <b>${data.elapsedMs}ms</b></span>
-      <span>REQUEST <b>${escapeHtml(data.globalMessageId)}</b></span>
+      <span>REQUEST <b>${escapeHtml(data.globalMessageId)}</b><button type="button" class="copy-btn" data-copy="${escapeHtml(data.globalMessageId)}" aria-label="Copy request ID">
+        <span class="icon-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></span>
+        <span class="icon-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+      </button></span>
     </div>`;
 
     if (hasViolations) {
@@ -807,6 +805,35 @@
     resultEl.innerHTML = html;
   }
 
+  function fallbackCopyText(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (err) { /* nothing more we can do */ }
+    document.body.removeChild(ta);
+  }
+
+  resultEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    const text = btn.dataset.copy;
+    const showCopied = () => {
+      btn.classList.add('copied');
+      setTimeout(() => btn.classList.remove('copied'), 1200);
+    };
+    // navigator.clipboard requires a secure context (HTTPS or localhost) - this app is
+    // often reached over plain HTTP via a LAN IP, so fall back to execCommand there.
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(showCopied).catch(() => { fallbackCopyText(text); showCopied(); });
+    } else {
+      fallbackCopyText(text);
+      showCopied();
+    }
+  });
+
   function renderError(message) {
     resultEl.innerHTML = `<div class="error-card">
       <div class="verdict-stamp"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${STAMP_ICONS.warn}</svg></div>
@@ -820,13 +847,20 @@
     }[c]));
   }
 
+  const SCAN_PHRASES = ['Uploading file…', 'Sending to Protector…', 'Matching policy conditions…', 'Awaiting verdict…'];
+
   sendBtn.addEventListener('click', async () => {
     if (!selectedFile) return;
 
     sendBtn.disabled = true;
-    progressTrack.classList.add('active');
-    statusText.textContent = 'Sending to Protector for scanning…';
     resultEl.innerHTML = '';
+    scanVisual.classList.add('active');
+    let phraseIndex = 0;
+    scanStatus.textContent = SCAN_PHRASES[0];
+    const phraseTimer = setInterval(() => {
+      phraseIndex = (phraseIndex + 1) % SCAN_PHRASES.length;
+      scanStatus.textContent = SCAN_PHRASES[phraseIndex];
+    }, 900);
 
     const formData = new FormData();
     formData.append('file', selectedFile);
@@ -843,19 +877,46 @@
     } catch (err) {
       renderError('Network error: unable to reach the server');
     } finally {
-      progressTrack.classList.remove('active');
-      statusText.textContent = '';
+      clearInterval(phraseTimer);
+      scanVisual.classList.remove('active');
       sendBtn.disabled = false;
     }
   });
 
+  // --- Protector health badge ---
+  const healthBadge = document.getElementById('healthBadge');
+  const healthText = document.getElementById('healthText');
+
+  async function refreshHealth() {
+    try {
+      const res = await fetch('/api/health');
+      const data = await res.json();
+      const online = !!(data.protector && data.protector.reachable);
+      healthBadge.className = 'health-badge ' + (online ? 'online' : 'offline');
+      healthText.textContent = online ? 'Protector online' : 'Protector unreachable';
+    } catch (err) {
+      healthBadge.className = 'health-badge offline';
+      healthText.textContent = 'Protector unreachable';
+    }
+  }
+
+  refreshHealth();
+  setInterval(refreshHealth, 20000);
+
   // --- Settings modal ---
   const settingsBtn = document.getElementById('settingsBtn');
   const settingsBackdrop = document.getElementById('settingsBackdrop');
+  const settingsPanel = document.getElementById('settingsPanel');
   const settingsCancelBtn = document.getElementById('settingsCancelBtn');
   const settingsSaveBtn = document.getElementById('settingsSaveBtn');
   const settingsStatus = document.getElementById('settingsStatus');
   const maxSizeHint = document.getElementById('maxSizeHint');
+  let lastFocusedBeforeModal = null;
+
+  function getFocusableInModal() {
+    return Array.from(settingsPanel.querySelectorAll('button, input:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+      .filter((el) => el.offsetParent !== null);
+  }
 
   const FIELDS = {
     maxFileSizeMb: { input: document.getElementById('input-maxFileSizeMb'), toggle: document.getElementById('enable-maxFileSizeMb'), row: document.getElementById('row-maxFileSizeMb') },
@@ -890,6 +951,12 @@
     }
   }
 
+  function openModalFocus() {
+    lastFocusedBeforeModal = document.activeElement;
+    const focusable = getFocusableInModal();
+    (focusable[0] || settingsPanel).focus();
+  }
+
   async function openSettings() {
     clearFieldErrors();
     settingsStatus.textContent = '';
@@ -899,21 +966,43 @@
       const data = await res.json();
       populateSettingsForm(data.fields);
       settingsBackdrop.classList.add('visible');
+      openModalFocus();
     } catch (err) {
       settingsStatus.textContent = 'Failed to load current settings';
       settingsStatus.className = 'settings-status error';
       settingsBackdrop.classList.add('visible');
+      openModalFocus();
     }
   }
 
   function closeSettings() {
     settingsBackdrop.classList.remove('visible');
+    (lastFocusedBeforeModal || settingsBtn).focus();
   }
 
   settingsBtn.addEventListener('click', openSettings);
   settingsCancelBtn.addEventListener('click', closeSettings);
   settingsBackdrop.addEventListener('click', (e) => {
     if (e.target === settingsBackdrop) closeSettings();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!settingsBackdrop.classList.contains('visible')) return;
+    if (e.key === 'Escape') {
+      closeSettings();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const focusable = getFocusableInModal();
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   });
 
   settingsSaveBtn.addEventListener('click', async () => {
@@ -946,6 +1035,7 @@
       }
 
       maxSizeHint.textContent = data.effective.maxFileSizeMb + 'MB';
+      effectiveMaxFileSizeMb = data.effective.maxFileSizeMb;
       settingsStatus.textContent = 'Saved';
       settingsStatus.className = 'settings-status success';
       setTimeout(closeSettings, 700);
@@ -958,7 +1048,10 @@
   // Load the current max file size hint on page load without opening the modal
   fetch('/api/settings')
     .then((res) => res.json())
-    .then((data) => { maxSizeHint.textContent = data.effective.maxFileSizeMb + 'MB'; })
+    .then((data) => {
+      maxSizeHint.textContent = data.effective.maxFileSizeMb + 'MB';
+      effectiveMaxFileSizeMb = data.effective.maxFileSizeMb;
+    })
     .catch(() => {});
 </script>
 </body>

@@ -1,5 +1,6 @@
 const http = require('http');
 const https = require('https');
+const net = require('net');
 const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
@@ -62,6 +63,88 @@ function buildHttpWrappedUpload(fileBuffer, fileName) {
 }
 
 /**
+ * Low-level sender: POSTs a pre-built metadata object + file buffer to the
+ * Protector's Inspection API and returns the raw (unreshaped) response. Shared
+ * by the normal app flow (inspectFile) and the raw developer passthrough
+ * (inspectRaw) so both send bytes-for-bytes the same way.
+ *
+ * @param {object} metadata - the full metadata object (context/contentDescriptors/source/destinations)
+ * @param {Buffer} filePartBuffer - the exact bytes to send as the "0" form-data part
+ * @param {string} fileName - filename to use for the "0" part
+ * @returns {Promise<{httpStatus: number, body: object, elapsedMs: number}>}
+ */
+async function sendToProtector(metadata, filePartBuffer, fileName) {
+  const settings = getSettings();
+  const form = new FormData();
+  form.append('metadata', JSON.stringify(metadata), {
+    contentType: 'application/json',
+    filename: 'metadata.json',
+  });
+  form.append('0', filePartBuffer, {
+    contentType: 'application/http',
+    filename: fileName,
+  });
+
+  const headers = form.getHeaders();
+  headers['Content-Length'] = form.getLengthSync();
+  if (config.protector.token) {
+    headers['Authorization'] = `Bearer ${config.protector.token}`;
+  }
+
+  const requestOptions = {
+    protocol: config.protector.protocol === 'https' ? 'https:' : 'http:',
+    hostname: config.protector.host,
+    port: config.protector.port,
+    path: '/inspection/v4.0',
+    method: 'POST',
+    headers,
+    timeout: settings.requestTimeoutMs,
+  };
+
+  if (config.protector.protocol === 'https') {
+    requestOptions.ca = config.protector.caCert;
+    requestOptions.rejectUnauthorized = config.protector.rejectUnauthorized;
+  }
+
+  const transport = config.protector.protocol === 'https' ? https : http;
+  const startedAt = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const req = transport.request(requestOptions, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const elapsedMs = Date.now() - startedAt;
+        const rawBody = Buffer.concat(chunks).toString('utf8');
+        let parsedBody;
+        try {
+          parsedBody = rawBody ? JSON.parse(rawBody) : {};
+        } catch (err) {
+          return reject(
+            Object.assign(new Error(`Protector returned non-JSON response (HTTP ${res.statusCode}): ${rawBody.slice(0, 500)}`), {
+              code: 'INVALID_RESPONSE',
+              httpStatus: res.statusCode,
+              elapsedMs,
+            })
+          );
+        }
+        resolve({ httpStatus: res.statusCode, body: parsedBody, elapsedMs });
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy(Object.assign(new Error('Request to Protector timed out'), { code: 'TIMEOUT' }));
+    });
+
+    req.on('error', (err) => {
+      reject(Object.assign(err, { elapsedMs: Date.now() - startedAt }));
+    });
+
+    form.pipe(req);
+  });
+}
+
+/**
  * Sends a file to the Forcepoint DLP Protector Inspection REST API (v4.0)
  * and returns the parsed response along with timing info.
  *
@@ -117,73 +200,59 @@ async function inspectFile(fileBuffer, originalName, clientIp) {
     ],
   };
 
-  const form = new FormData();
-  form.append('metadata', JSON.stringify(metadata), {
-    contentType: 'application/json',
-    filename: 'metadata.json',
-  });
-  form.append('0', httpWrappedFile, {
-    contentType: 'application/http',
-    filename: originalName,
-  });
+  const result = await sendToProtector(metadata, httpWrappedFile, originalName);
+  return { ...result, globalMessageId };
+}
 
-  const headers = form.getHeaders();
-  headers['Content-Length'] = form.getLengthSync();
-  if (config.protector.token) {
-    headers['Authorization'] = `Bearer ${config.protector.token}`;
+/**
+ * Developer passthrough: sends a caller-supplied raw metadata JSON string
+ * straight to the Protector, bypassing this app's own metadata construction
+ * (Settings, auto-detected source, etc.) entirely. Used by the "Try it out"
+ * panel in /docs so developers can experiment with the Inspection API's raw
+ * request/response shape directly, without needing Postman or curl.
+ *
+ * @param {string} metadataJsonString - raw JSON text as typed by the developer
+ * @param {Buffer} fileBuffer - raw file content
+ * @param {string} fileName
+ * @param {boolean} wrap - whether to apply the HTTP-wrap trick (see buildHttpWrappedUpload).
+ *   Defaults to true; set false to demonstrate the "raw bytes always produce 0 matches" gotcha.
+ * @returns {Promise<{httpStatus: number, body: object, elapsedMs: number}>}
+ */
+async function inspectRaw(metadataJsonString, fileBuffer, fileName, wrap = true) {
+  let metadata;
+  try {
+    metadata = JSON.parse(metadataJsonString);
+  } catch (err) {
+    throw Object.assign(new Error(`metadata is not valid JSON: ${err.message}`), { code: 'INVALID_METADATA' });
   }
 
-  const requestOptions = {
-    protocol: config.protector.protocol === 'https' ? 'https:' : 'http:',
-    hostname: config.protector.host,
-    port: config.protector.port,
-    path: '/inspection/v4.0',
-    method: 'POST',
-    headers,
-    timeout: settings.requestTimeoutMs,
-  };
+  const filePart = wrap ? buildHttpWrappedUpload(fileBuffer, fileName) : fileBuffer;
+  return sendToProtector(metadata, filePart, fileName);
+}
 
-  if (config.protector.protocol === 'https') {
-    requestOptions.ca = config.protector.caCert;
-    requestOptions.rejectUnauthorized = config.protector.rejectUnauthorized;
-  }
+/**
+ * Quick TCP reachability check against the configured Protector host/port -
+ * does NOT send an actual inspection request (no side effects, no dependency
+ * on a valid metadata payload). Used by GET /api/health.
+ *
+ * @param {number} timeoutMs
+ * @returns {Promise<{reachable: boolean, elapsedMs: number, error?: string}>}
+ */
+function checkProtectorReachability(timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    const socket = net.connect({ host: config.protector.host, port: config.protector.port });
 
-  const transport = config.protector.protocol === 'https' ? https : http;
-  const startedAt = Date.now();
+    const finish = (reachable, error) => {
+      socket.destroy();
+      resolve({ reachable, elapsedMs: Date.now() - startedAt, ...(error ? { error } : {}) });
+    };
 
-  return new Promise((resolve, reject) => {
-    const req = transport.request(requestOptions, (res) => {
-      const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => {
-        const elapsedMs = Date.now() - startedAt;
-        const rawBody = Buffer.concat(chunks).toString('utf8');
-        let parsedBody;
-        try {
-          parsedBody = rawBody ? JSON.parse(rawBody) : {};
-        } catch (err) {
-          return reject(
-            Object.assign(new Error(`Protector returned non-JSON response (HTTP ${res.statusCode}): ${rawBody.slice(0, 500)}`), {
-              code: 'INVALID_RESPONSE',
-              httpStatus: res.statusCode,
-              elapsedMs,
-            })
-          );
-        }
-        resolve({ httpStatus: res.statusCode, body: parsedBody, elapsedMs, globalMessageId });
-      });
-    });
-
-    req.on('timeout', () => {
-      req.destroy(Object.assign(new Error('Request to Protector timed out'), { code: 'TIMEOUT' }));
-    });
-
-    req.on('error', (err) => {
-      reject(Object.assign(err, { elapsedMs: Date.now() - startedAt }));
-    });
-
-    form.pipe(req);
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false, 'Timed out'));
+    socket.once('error', (err) => finish(false, err.code || err.message));
   });
 }
 
-module.exports = { inspectFile };
+module.exports = { inspectFile, inspectRaw, buildHttpWrappedUpload, checkProtectorReachability };
