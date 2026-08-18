@@ -80,7 +80,7 @@ reachable — useful for monitoring or for the Windows Service setup below.
 
 ## Installing as a Windows Service (services.msc)
 
-To move the app to another machine and run it as a Windows Service (shows up in `services.msc`,
+run it as a Windows Service (shows up in `services.msc`,
 starts automatically with the machine, and restarts itself if it crashes) — the project ships
 with built-in support via the [`node-windows`](https://www.npmjs.com/package/node-windows)
 package.
