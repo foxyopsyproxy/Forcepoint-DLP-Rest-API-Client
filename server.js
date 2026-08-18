@@ -2,6 +2,8 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
+const http = require('http');
+const https = require('https');
 const config = require('./src/config');
 const { inspectFileWithFailover, inspectRaw, checkProtectorReachability, listProtectorSummaries, isConnectionClassError } = require('./src/protectorClient');
 const { getSettings, getFieldStates, updateSettings, DATA_CHANNEL_OPTIONS, WEBHOOK_FORMAT_OPTIONS } = require('./src/settingsStore');
@@ -120,7 +122,9 @@ app.get('/api/history', (req, res) => {
 // Registered before /api/history/:id - otherwise Express would match "analytics" as an :id.
 app.get('/api/history/analytics', (req, res) => {
   const q = req.query;
-  res.json(getAnalytics({ from: q.from, to: q.to, protectorId: q.protectorId, dataChannel: q.dataChannel }));
+  res.json(
+    getAnalytics({ from: q.from, to: q.to, protectorId: q.protectorId, dataChannel: q.dataChannel, bucket: q.bucket })
+  );
 });
 
 function csvEscape(value) {
@@ -382,10 +386,35 @@ app.post('/api/protector/raw', (req, res) => {
   });
 });
 
-app.listen(config.server.port, () => {
-  console.log(`DLP Protector client listening on http://localhost:${config.server.port}`);
+function logStartup(scheme) {
+  console.log(`DLP Protector client listening on ${scheme}://localhost:${config.server.port}`);
   config.protectors.forEach((p) => {
     const isDefault = p.id === config.defaultProtectorId ? ' (default)' : '';
     console.log(`  - ${p.name}${isDefault}: ${p.protocol}://${p.host}:${p.port}/inspection/v4.0`);
   });
-});
+}
+
+if (config.server.https) {
+  https.createServer(config.server.https, app).listen(config.server.port, () => {
+    logStartup('https');
+
+    // Optional plaintext listener that does nothing but redirect to the HTTPS URL,
+    // so an existing http:// bookmark still lands somewhere useful instead of
+    // failing with a confusing TLS error. Reuses the requested Host header (minus
+    // any port) so this works whatever hostname/IP the app is reached by.
+    if (config.server.httpRedirectPort) {
+      http
+        .createServer((req, res) => {
+          const host = String(req.headers.host || 'localhost').replace(/:\d+$/, '');
+          const target = `https://${host}:${config.server.port}${req.url}`;
+          res.writeHead(301, { Location: target });
+          res.end();
+        })
+        .listen(config.server.httpRedirectPort, () => {
+          console.log(`  (http://localhost:${config.server.httpRedirectPort} redirects to https)`);
+        });
+    }
+  });
+} else {
+  app.listen(config.server.port, () => logStartup('http'));
+}

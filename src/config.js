@@ -52,6 +52,48 @@ function buildProtectorEntry(prefix, id, defaultName) {
   };
 }
 
+// Reads a required PEM file for the app's own TLS listener. Fails loudly at startup
+// rather than letting the server boot and then refuse every connection - a missing
+// cert path is a deployment mistake worth stopping for.
+function readTlsFile(envVar, label) {
+  const raw = (process.env[envVar] || '').trim();
+  if (!raw) {
+    throw new Error(`SERVER_HTTPS_ENABLED is true but ${envVar} is not set (path to the ${label}).`);
+  }
+  const resolved = path.resolve(raw);
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`${envVar} points to a file that does not exist: ${resolved}`);
+  }
+  return fs.readFileSync(resolved);
+}
+
+// Returns null when HTTPS is disabled, otherwise { cert, key, ca?, passphrase? }
+// ready to hand straight to https.createServer().
+function buildServerTls() {
+  if (!parseBool(process.env.SERVER_HTTPS_ENABLED, false)) return null;
+
+  const options = {
+    cert: readTlsFile('SERVER_TLS_CERT_PATH', 'server certificate'),
+    key: readTlsFile('SERVER_TLS_KEY_PATH', 'server private key'),
+  };
+
+  // Only needed when the issuing CA is not already trusted by the client, or when
+  // intermediates must be presented - a chain file here is sent alongside the leaf.
+  const caPath = (process.env.SERVER_TLS_CA_PATH || '').trim();
+  if (caPath) {
+    const resolved = path.resolve(caPath);
+    if (!fs.existsSync(resolved)) {
+      throw new Error(`SERVER_TLS_CA_PATH points to a file that does not exist: ${resolved}`);
+    }
+    options.ca = fs.readFileSync(resolved);
+  }
+
+  const passphrase = process.env.SERVER_TLS_PASSPHRASE || '';
+  if (passphrase) options.passphrase = passphrase;
+
+  return options;
+}
+
 // Numbered format (PROTECTOR_1_HOST, PROTECTOR_2_HOST, ...) - for more than one Protector.
 const protectors = [];
 for (let i = 1; process.env[`PROTECTOR_${i}_HOST`]; i++) {
@@ -89,6 +131,14 @@ const config = {
   maxFileSizeMb: parseIntEnv(process.env.MAX_FILE_SIZE_MB, 30),
   server: {
     port: parseIntEnv(process.env.PORT, 3000),
+    // TLS for THIS app's own listener (not the outbound connection to a Protector,
+    // which is configured per-protector above). Off by default so an existing
+    // install keeps working unchanged; see buildServerTls() for the file loading.
+    https: buildServerTls(),
+    // When HTTPS is on, optionally run a tiny listener on this port whose only job
+    // is to 301 anyone who typed http:// over to the https:// URL. Empty = no
+    // plaintext listener at all.
+    httpRedirectPort: parseIntEnv(process.env.HTTP_REDIRECT_PORT, null),
   },
   logFilePath: process.env.LOG_FILE_PATH || './logs/requests.log.jsonl',
   // SQLite-backed history store (see src/db.js). logFilePath above stays as the

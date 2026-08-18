@@ -295,9 +295,11 @@ function getHistoryForExport(filters = {}, maxRows = 50000) {
 
 /**
  * Aggregates for the Analytics dashboard - scans-over-time/block-rate trend,
- * per-protector and per-data-channel volume splits, and top violated
- * policies/rules. All computed as indexed SQL GROUP BYs rather than re-parsing
- * JSON blobs in JS - this is the reason scan_violations is its own table.
+ * per-protector and per-data-channel volume splits, top violated policies/rules,
+ * a summary (totalScans/totalBlocked/blockRate/medianElapsedMs), and a verdict
+ * breakdown (block/warn/pass/error counts). All computed as indexed SQL GROUP
+ * BYs rather than re-parsing JSON blobs in JS - this is the reason
+ * scan_violations is its own table.
  *
  * @param {object} filters - same shape as queryHistory's filters (from/to/protectorId/dataChannel)
  */
@@ -309,10 +311,18 @@ function getAnalytics(filters = {}) {
   };
 
   // Bucketed by local calendar day, matching computeStats()'s "since local midnight"
-  // definition of "today" elsewhere in this file.
+  // definition of "today" elsewhere in this file. Over a single day that would collapse
+  // to one point and stop being a graph at all, so the caller can ask for hourly
+  // buckets instead - the bucket key stays in the same `day` field either way, and the
+  // frontend formats the axis label from `bucket`.
+  const bucket = filters.bucket === 'hour' ? 'hour' : 'day';
+  const bucketExpr =
+    bucket === 'hour'
+      ? "strftime('%Y-%m-%d %H:00', timestamp_ms / 1000, 'unixepoch', 'localtime')"
+      : "strftime('%Y-%m-%d', timestamp_ms / 1000, 'unixepoch', 'localtime')";
   const trend = db
     .prepare(
-      `SELECT strftime('%Y-%m-%d', timestamp_ms / 1000, 'unixepoch', 'localtime') as day,
+      `SELECT ${bucketExpr} as day,
               COUNT(*) as total,
               SUM(CASE WHEN verdict = 'block' THEN 1 ELSE 0 END) as blocked
        FROM scan_history ${whereWith()}
@@ -320,13 +330,26 @@ function getAnalytics(filters = {}) {
     )
     .all(...params);
 
-  const byProtector = db
-    .prepare(
-      `SELECT protector_name as name, COUNT(*) as count FROM scan_history
-       ${whereWith('protector_name IS NOT NULL')}
-       GROUP BY protector_name ORDER BY count DESC`
-    )
-    .all(...params);
+  // Grouped by protector_id, not protector_name: a Protector that was renamed in .env
+  // has old rows under its previous name, which would otherwise show up as extra bars
+  // for what is really the same appliance. Rows whose id is no longer configured at all
+  // (e.g. the legacy single-Protector 'default' id) are left out entirely, so this chart
+  // only ever lists Protectors that currently exist in config.
+  const configuredProtectors = config.protectors;
+  const byProtector = configuredProtectors.length
+    ? (() => {
+        const idPlaceholders = configuredProtectors.map(() => '?').join(',');
+        const nameById = new Map(configuredProtectors.map((p) => [p.id, p.name]));
+        return db
+          .prepare(
+            `SELECT protector_id as id, COUNT(*) as count FROM scan_history
+             ${whereWith(`protector_id IN (${idPlaceholders})`)}
+             GROUP BY protector_id ORDER BY count DESC`
+          )
+          .all(...params, ...configuredProtectors.map((p) => p.id))
+          .map((r) => ({ name: nameById.get(r.id) || r.id, count: r.count }));
+      })()
+    : [];
 
   const byChannel = db
     .prepare(
@@ -345,6 +368,22 @@ function getAnalytics(filters = {}) {
     )
     .all(...params);
 
+  const totals = db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN verdict = 'block' THEN 1 ELSE 0 END) as blocked FROM scan_history ${whereWith()}`).get(...params);
+  const elapsedValues = db
+    .prepare(`SELECT elapsed_ms FROM scan_history ${whereWith('elapsed_ms IS NOT NULL')}`)
+    .all(...params)
+    .map((r) => r.elapsed_ms);
+  const verdictBreakdown = db
+    .prepare(`SELECT verdict, COUNT(*) as count FROM scan_history ${whereWith('verdict IS NOT NULL')} GROUP BY verdict`)
+    .all(...params);
+
+  const summary = {
+    totalScans: totals.total || 0,
+    totalBlocked: totals.blocked || 0,
+    blockRate: totals.total ? (totals.blocked || 0) / totals.total : 0,
+    medianElapsedMs: median(elapsedValues),
+  };
+
   const topRules = db
     .prepare(
       `SELECT v.rule_name as name, COUNT(*) as hits, COALESCE(SUM(v.matches), 0) as totalMatches
@@ -354,7 +393,7 @@ function getAnalytics(filters = {}) {
     )
     .all(...params);
 
-  return { trend, byProtector, byChannel, topPolicies, topRules };
+  return { trend, bucket, byProtector, byChannel, topPolicies, topRules, summary, verdictBreakdown };
 }
 
 /**

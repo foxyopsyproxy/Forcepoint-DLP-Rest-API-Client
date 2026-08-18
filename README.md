@@ -109,6 +109,49 @@ address in a browser, drag a file (or click to choose one), and click "Send for 
 `GET /api/health` reports whether the server is up and whether the Protector is currently
 reachable — useful for monitoring or for the Windows Service setup below.
 
+## Serving the app over HTTPS
+
+By default the app serves plain HTTP. To serve the UI and API over TLS instead — using a
+certificate signed by your own internal root CA — put the PEM certificate and private key
+somewhere the service account can read (`certs/` is gitignored for this purpose) and set:
+
+```bash
+SERVER_HTTPS_ENABLED=true
+SERVER_TLS_CERT_PATH=./certs/server.crt
+SERVER_TLS_KEY_PATH=./certs/server.key
+```
+
+The app then listens **with TLS on `PORT`** and opens no plaintext port at all. Restart the
+app (or the Windows Service) after changing these. On startup it logs `https://…` rather than
+`http://…`, which is the quickest way to confirm TLS is actually active.
+
+**The certificate must carry a Subject Alternative Name for every hostname or IP people
+actually type.** Modern browsers ignore the Common Name completely — a cert issued only as
+`CN=dlp-client` will still throw a name-mismatch warning. Include each name you use, e.g.
+`DNS:dlp-client.local` plus `IP:10.0.0.10` if the app is also reached by address.
+
+Requesting a cert from your CA with the right SAN — generate a key and CSR, then hand the CSR
+to your CA:
+
+```bash
+openssl req -newkey rsa:2048 -nodes -keyout certs/server.key -out certs/server.csr -subj "/CN=dlp-client.local" -addext "subjectAltName=DNS:dlp-client.local,IP:10.0.0.10"
+```
+
+Other options:
+
+| Variable | Purpose |
+| --- | --- |
+| `SERVER_TLS_CA_PATH` | Intermediate/chain bundle to present alongside the certificate. Only needed if your CA issues via intermediates and you haven't appended them to the cert file (leaf first, then intermediates). |
+| `SERVER_TLS_PASSPHRASE` | Only if the private key file is encrypted. |
+| `HTTP_REDIRECT_PORT` | Runs a tiny plaintext listener on this port that does nothing but `301` to the `https://` URL, so old `http://` bookmarks still work. Leave empty for HTTPS only. |
+
+Any of these paths being wrong stops the app at startup with an explicit message, rather than
+letting it boot and then fail every connection.
+
+Two things to check on the host once HTTPS is on: the firewall must allow the port, and every
+client machine must trust your root CA (usually already true via domain policy — otherwise the
+browser shows an untrusted-issuer warning even though the certificate itself is valid).
+
 ## Installing as a Windows Service (services.msc)
 
 run it as a Windows Service (shows up in `services.msc`,

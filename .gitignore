@@ -3,3 +3,9 @@ node_modules/
 logs/
 data/
 daemon/
+
+# TLS material for the app's own HTTPS listener - private keys must never be committed
+certs/
+*.key
+*.pem
+*.pfx
