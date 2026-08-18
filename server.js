@@ -3,10 +3,20 @@ const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
 const config = require('./src/config');
-const { inspectFile, inspectRaw, checkProtectorReachability } = require('./src/protectorClient');
-const { logScanEvent } = require('./src/logger');
-const { getSettings, getFieldStates, updateSettings, DATA_CHANNEL_OPTIONS } = require('./src/settingsStore');
-const { getHistory, getHistoryEntry } = require('./src/historyStore');
+const { inspectFileWithFailover, inspectRaw, checkProtectorReachability, listProtectorSummaries, isConnectionClassError } = require('./src/protectorClient');
+const { getSettings, getFieldStates, updateSettings, DATA_CHANNEL_OPTIONS, WEBHOOK_FORMAT_OPTIONS } = require('./src/settingsStore');
+const {
+  getHistoryEntry,
+  queryHistory,
+  getHistoryForExport,
+  getAnalytics,
+  recordScanEvent,
+  isBlockingAction,
+  migrateFromJsonlIfNeeded,
+} = require('./src/historyStore');
+const { notifyBlock } = require('./src/webhookNotifier');
+
+migrateFromJsonlIfNeeded();
 
 const app = express();
 const memoryStorage = multer.memoryStorage();
@@ -19,6 +29,24 @@ function fixFilenameEncoding(name) {
   return Buffer.from(name, 'latin1').toString('utf8');
 }
 
+// Node's raw network error messages embed the actual host:port being connected to
+// (e.g. "connect ETIMEDOUT 192.168.50.199:8443") - safe to log to this process's own
+// console, but must never reach the browser or the persisted history log, which both
+// this app's UI and its API expose. Always resolve to one of these generic messages
+// instead of touching error.message for anything connection-related.
+function sanitizeProtectorError(error) {
+  if (error.code === 'TIMEOUT') {
+    return 'Timed out waiting for a response from the Protector';
+  }
+  if (isConnectionClassError(error)) {
+    return `Unable to connect to the Protector (${error.code})`;
+  }
+  if (error.code === 'INVALID_RESPONSE') {
+    return 'Protector returned a response this app could not parse';
+  }
+  return 'Unexpected error while contacting the Protector';
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
@@ -27,7 +55,15 @@ app.get('/docs', (req, res) => {
 });
 
 app.get('/api/health', async (req, res) => {
-  const protector = await checkProtectorReachability();
+  let protector;
+  try {
+    protector = await checkProtectorReachability(req.query.protectorId);
+  } catch (err) {
+    if (err.code === 'UNKNOWN_PROTECTOR') {
+      return res.status(400).json({ error: err.message });
+    }
+    throw err;
+  }
   res.json({
     status: 'ok',
     uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
@@ -41,9 +77,112 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+app.get('/api/protectors', async (req, res) => {
+  const summaries = listProtectorSummaries();
+  const withReachability = await Promise.all(
+    summaries.map(async (p) => {
+      if (p.disabled) {
+        return { id: p.id, name: p.name, disabled: true, unavailableReason: p.unavailableReason };
+      }
+      const check = await checkProtectorReachability(p.id);
+      return {
+        id: p.id,
+        name: p.name,
+        reachable: check.reachable,
+        checkedInMs: check.elapsedMs,
+        ...(check.error ? { error: check.error } : {}),
+      };
+    })
+  );
+  res.json({ protectors: withReachability, defaultProtectorId: config.defaultProtectorId });
+});
+
 app.get('/api/history', (req, res) => {
-  const limit = Math.max(1, Math.min(500, parseInt(req.query.limit, 10) || 50));
-  res.json(getHistory(limit));
+  const q = req.query;
+  const pageSizeRaw = q.pageSize || q.limit;
+  res.json(
+    queryHistory({
+      from: q.from,
+      to: q.to,
+      protectorId: q.protectorId,
+      verdict: q.verdict,
+      dataChannel: q.dataChannel,
+      fileName: q.fileName,
+      minElapsedMs: q.minElapsedMs !== undefined ? parseInt(q.minElapsedMs, 10) : undefined,
+      sortBy: q.sortBy,
+      sortDir: q.sortDir,
+      page: q.page ? parseInt(q.page, 10) : undefined,
+      pageSize: pageSizeRaw ? parseInt(pageSizeRaw, 10) : undefined,
+    })
+  );
+});
+
+// Registered before /api/history/:id - otherwise Express would match "analytics" as an :id.
+app.get('/api/history/analytics', (req, res) => {
+  const q = req.query;
+  res.json(getAnalytics({ from: q.from, to: q.to, protectorId: q.protectorId, dataChannel: q.dataChannel }));
+});
+
+function csvEscape(value) {
+  const s = value === undefined || value === null ? '' : String(value);
+  return /["\n,]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+const CSV_EXPORT_MAX_ROWS = 50000;
+const CSV_HEADER = [
+  'Timestamp', 'File Name', 'File Size (bytes)', 'Resolution', 'Protector', 'Data Channel',
+  'Source Host IPs', 'Source Host Name', 'Policies', 'Max Matches', 'Elapsed (ms)', 'HTTP Status', 'Error', 'Error Code',
+];
+
+// Registered before /api/history/:id, same reason as /analytics above.
+app.get('/api/history/export.csv', (req, res) => {
+  const q = req.query;
+  const entries = getHistoryForExport(
+    {
+      from: q.from,
+      to: q.to,
+      protectorId: q.protectorId,
+      verdict: q.verdict,
+      dataChannel: q.dataChannel,
+      fileName: q.fileName,
+      minElapsedMs: q.minElapsedMs !== undefined ? parseInt(q.minElapsedMs, 10) : undefined,
+      sortBy: q.sortBy,
+      sortDir: q.sortDir,
+    },
+    CSV_EXPORT_MAX_ROWS
+  );
+
+  const lines = [CSV_HEADER.map(csvEscape).join(',')];
+  for (const e of entries) {
+    const policies = (e.violations || []).map((v) => v.policyName || v.policyId).filter(Boolean).join('; ');
+    lines.push(
+      [
+        e.timestamp,
+        e.fileName,
+        e.fileSizeBytes,
+        e.resolution,
+        e.protectorName,
+        e.dataChannel,
+        e.source && e.source.host_ips ? e.source.host_ips.join(' ') : '',
+        e.source && e.source.host_name ? e.source.host_name : '',
+        policies,
+        e.maxNumberOfMatches,
+        e.elapsedMs,
+        e.httpStatus,
+        e.error,
+        e.errorCode,
+      ]
+        .map(csvEscape)
+        .join(',')
+    );
+  }
+
+  // Leading BOM so Excel on Windows renders UTF-8 (Hebrew/emoji filenames etc.) correctly
+  // instead of mojibake - a well-known Excel-specific quirk, not needed by other consumers.
+  const csv = '\uFEFF' + lines.join('\r\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="dlp-history-export.csv"`);
+  res.send(csv);
 });
 
 app.get('/api/history/:id', (req, res) => {
@@ -55,7 +194,11 @@ app.get('/api/history/:id', (req, res) => {
 });
 
 app.get('/api/settings', (req, res) => {
-  res.json({ fields: getFieldStates(), effective: getSettings(), options: { dataChannel: DATA_CHANNEL_OPTIONS } });
+  res.json({
+    fields: getFieldStates(),
+    effective: getSettings(),
+    options: { dataChannel: DATA_CHANNEL_OPTIONS, webhookFormat: WEBHOOK_FORMAT_OPTIONS },
+  });
 });
 
 app.post('/api/settings', (req, res) => {
@@ -96,11 +239,11 @@ app.post('/api/scan', (req, res) => {
     const requestId = crypto.randomUUID();
 
     try {
-      const result = await inspectFile(buffer, originalname, req.ip, requestId);
-      const { httpStatus, body, elapsedMs, globalMessageId, source, dataChannel } = result;
+      const result = await inspectFileWithFailover(buffer, originalname, req.ip, requestId, req.body.protectorId);
+      const { httpStatus, body, elapsedMs, globalMessageId, source, dataChannel, protectorId, protectorName, failedOver, attemptedProtectors } = result;
 
       if (httpStatus < 200 || httpStatus >= 300) {
-        logScanEvent({
+        recordScanEvent({
           globalMessageId,
           fileName: originalname,
           fileSizeBytes: size,
@@ -109,6 +252,9 @@ app.post('/api/scan', (req, res) => {
           elapsedMs,
           source,
           dataChannel,
+          protectorId,
+          protectorName,
+          ...(failedOver ? { failedOver, attemptedProtectors } : {}),
           error: `Protector returned HTTP ${httpStatus}`,
         });
         return res.status(502).json({
@@ -140,30 +286,50 @@ app.post('/api/scan', (req, res) => {
         fileSizeBytes: size,
         source,
         dataChannel,
+        protectorId,
+        protectorName,
+        ...(failedOver ? { failedOver, attemptedProtectors } : {}),
       };
 
-      logScanEvent({ ...responsePayload, httpStatus });
+      recordScanEvent({ ...responsePayload, httpStatus });
 
-      return res.json(responsePayload);
+      res.json(responsePayload);
+
+      // Fire-and-forget: sent after the response so a slow/dead webhook endpoint
+      // can never add latency to the user-facing scan. Failures are logged
+      // server-side only, never surfaced as a scan failure.
+      if (isBlockingAction(responsePayload.actions)) {
+        notifyBlock(responsePayload).catch((err) => console.error('Webhook notify failed:', err.message));
+      }
+      return;
     } catch (error) {
+      if (error.code === 'UNKNOWN_PROTECTOR' || error.code === 'PROTECTOR_DISABLED') {
+        return res.status(400).json({ error: error.message });
+      }
+
+      console.error('Scan failed:', error);
+      const safeMessage = sanitizeProtectorError(error);
       const elapsedMs = error.elapsedMs || 0;
-      logScanEvent({
+      recordScanEvent({
         globalMessageId: requestId,
         fileName: originalname,
         fileSizeBytes: size,
         resolution: null,
         elapsedMs,
-        error: error.message,
+        protectorId: error.protectorId,
+        protectorName: error.protectorName,
+        ...(error.attemptedProtectors ? { attemptedProtectors: error.attemptedProtectors } : {}),
+        error: safeMessage,
         errorCode: error.code || null,
       });
 
       if (error.code === 'TIMEOUT') {
-        return res.status(504).json({ error: 'Timed out waiting for a response from the Protector' });
+        return res.status(504).json({ error: safeMessage });
       }
-      if (error.code === 'ECONNREFUSED' || error.code === 'EHOSTUNREACH' || error.code === 'ENOTFOUND') {
-        return res.status(502).json({ error: `Unable to connect to the Protector (${error.code})` });
+      if (isConnectionClassError(error)) {
+        return res.status(502).json({ error: safeMessage });
       }
-      return res.status(500).json({ error: `Unexpected error: ${error.message}` });
+      return res.status(500).json({ error: safeMessage });
     }
   });
 });
@@ -197,26 +363,29 @@ app.post('/api/protector/raw', (req, res) => {
     const originalname = fixFilenameEncoding(req.file.originalname);
 
     try {
-      const result = await inspectRaw(req.body.metadata, req.file.buffer, originalname, wrap);
+      const result = await inspectRaw(req.body.metadata, req.file.buffer, originalname, wrap, req.body.protectorId);
       return res.status(result.httpStatus).json(result.body);
     } catch (error) {
-      if (error.code === 'INVALID_METADATA') {
+      if (error.code === 'INVALID_METADATA' || error.code === 'UNKNOWN_PROTECTOR' || error.code === 'PROTECTOR_DISABLED') {
         return res.status(400).json({ error: error.message });
       }
+      console.error('Direct-to-Protector request failed:', error);
+      const safeMessage = sanitizeProtectorError(error);
       if (error.code === 'TIMEOUT') {
-        return res.status(504).json({ error: 'Timed out waiting for a response from the Protector' });
+        return res.status(504).json({ error: safeMessage });
       }
-      if (error.code === 'ECONNREFUSED' || error.code === 'EHOSTUNREACH' || error.code === 'ENOTFOUND') {
-        return res.status(502).json({ error: `Unable to connect to the Protector (${error.code})` });
+      if (isConnectionClassError(error)) {
+        return res.status(502).json({ error: safeMessage });
       }
-      return res.status(500).json({ error: `Unexpected error: ${error.message}` });
+      return res.status(500).json({ error: safeMessage });
     }
   });
 });
 
 app.listen(config.server.port, () => {
   console.log(`DLP Protector client listening on http://localhost:${config.server.port}`);
-  console.log(
-    `Configured to send inspection requests to ${config.protector.protocol}://${config.protector.host}:${config.protector.port}/inspection/v4.0`
-  );
+  config.protectors.forEach((p) => {
+    const isDefault = p.id === config.defaultProtectorId ? ' (default)' : '';
+    console.log(`  - ${p.name}${isDefault}: ${p.protocol}://${p.host}:${p.port}/inspection/v4.0`);
+  });
 });

@@ -34,8 +34,8 @@ Key files:
 
 | File | Role |
 |---|---|
-| `server.js` | Express routes: `GET /api/health`, `POST /api/scan`, `GET /api/history`, `GET /api/history/:id`, `GET/POST /api/settings`, `GET /docs` |
-| `src/config.js` | Protector connection config from `.env` (host/port/protocol/token/TLS) |
+| `server.js` | Express routes: `GET /api/health`, `GET /api/protectors`, `POST /api/scan`, `GET /api/history`, `GET /api/history/:id`, `GET/POST /api/settings`, `GET /docs` |
+| `src/config.js` | Protector connection config from `.env` — one or more Protectors (host/port/protocol/token/TLS per entry) |
 | `src/settingsStore.js` | Runtime settings editable via the UI (saved in `data/settings.json`) |
 | `src/protectorClient.js` | **Builds the actual request to the Protector** and sends it — see section 3 |
 | `src/logger.js` | JSON-lines log for every scan |
@@ -68,11 +68,37 @@ Always responds `200` — check `protector.reachable` (and the `error` field, e.
 `"ECONNREFUSED"`, when it's `false`), not the HTTP status. The Protector's host/port are never
 included in the response, same as everywhere else in this app.
 
+Accepts an optional `?protectorId=` query param when more than one Protector is configured (see
+`GET /api/protectors` below) — defaults to `PROTECTOR_DEFAULT` from `.env` if omitted.
+
+### `GET /api/protectors`
+
+Lists every configured Protector — used to populate the "Send to Protector" picker in the UI.
+Each entry is checked for reachability the same way `GET /api/health` checks the default one
+(TCP connect, no real inspection request).
+
+**Example response (200)**:
+```json
+{
+  "protectors": [
+    { "id": "1", "name": "Production", "reachable": true, "checkedInMs": 11 },
+    { "id": "2", "name": "Staging", "reachable": false, "checkedInMs": 3009, "error": "Timed out" }
+  ],
+  "defaultProtectorId": "1"
+}
+```
+
+As with everywhere else in this app, only `id` and the friendly `name` you set in `.env` are
+exposed — never host, port, or token.
+
 ### `POST /api/scan`
 
 Scans a file against the Protector and returns the result.
 
-**Body**: `multipart/form-data` with a single field `file` (the file to scan).
+**Body**: `multipart/form-data`:
+- `file` (binary, required) — the file to scan
+- `protectorId` (text, optional) — which configured Protector to send to (see `GET /api/protectors`
+  for valid ids). Defaults to `PROTECTOR_DEFAULT` from `.env`. An unrecognized id returns `400`.
 
 **Example response (200)**:
 ```json
@@ -92,7 +118,11 @@ Scans a file against the Protector and returns the result.
   "maxNumberOfMatches": 1,
   "elapsedMs": 80,
   "fileName": "file.txt",
-  "fileSizeBytes": 73
+  "fileSizeBytes": 73,
+  "source": { "host_ips": ["10.20.4.51"], "host_name": "FINANCE-PC-01" },
+  "dataChannel": "HTTP",
+  "protectorId": "1",
+  "protectorName": "Production"
 }
 ```
 
@@ -113,6 +143,7 @@ unprocessed.
 - `wrap` (text, optional) — `"true"` (default) or `"false"`. Set false to send the file's raw
   bytes instead of the HTTP-wrapped envelope — a quick way to reproduce the "always 0 matches"
   gotcha from section 3 live, without editing any code.
+- `protectorId` (text, optional) — same as `POST /api/scan` above.
 
 Response is the Protector's exact JSON body, unmodified (snake_case fields, `cpe_transaction_info`,
 etc.) — mirrored with the same HTTP status the Protector returned.

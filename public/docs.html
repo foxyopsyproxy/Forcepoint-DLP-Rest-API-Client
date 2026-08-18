@@ -306,6 +306,53 @@
 
   <div class="section">
     <div class="section-head">
+      <h2>Protectors</h2>
+      <p>List every configured Protector and its live reachability</p>
+    </div>
+
+    <div class="endpoint" data-endpoint>
+      <div class="endpoint-row" data-toggle tabindex="0" role="button" aria-expanded="false">
+        <span class="method get">GET</span>
+        <span class="path">/api/protectors</span>
+        <span class="desc">Powers the "Send to Protector" picker — id, name, and reachability for each configured Protector</span>
+        <span class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      </div>
+      <div class="endpoint-body">
+        <p class="bypass-note">
+          Only <code>id</code> and the friendly <code>name</code> you set in <code>.env</code> are ever
+          exposed — host, port, and token stay server-side, same as everywhere else in this app. Each
+          entry's reachability is checked the same way as <code>GET /api/health</code> (a TCP connect,
+          not a real inspection request).
+        </p>
+
+        <div class="subhead">Example response — 200 OK</div>
+        <div class="pre-wrap">
+        <pre>{
+  <span class="k">"protectors"</span>: [
+    { <span class="k">"id"</span>: <span class="s">"1"</span>, <span class="k">"name"</span>: <span class="s">"Production"</span>, <span class="k">"reachable"</span>: <span class="n">true</span>, <span class="k">"checkedInMs"</span>: <span class="n">11</span> },
+    { <span class="k">"id"</span>: <span class="s">"2"</span>, <span class="k">"name"</span>: <span class="s">"Staging"</span>, <span class="k">"reachable"</span>: <span class="n">false</span>, <span class="k">"checkedInMs"</span>: <span class="n">3009</span>, <span class="k">"error"</span>: <span class="s">"Timed out"</span> }
+  ],
+  <span class="k">"defaultProtectorId"</span>: <span class="s">"1"</span>
+}</pre>
+        <button type="button" class="pre-copy-btn" aria-label="Copy to clipboard">
+          <span class="icon-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></span>
+          <span class="icon-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        </button>
+        </div>
+
+        <div class="subhead">Try it out</div>
+        <div class="try-form">
+          <div class="try-actions">
+            <button class="try-btn" id="protectorsExecuteBtn">Execute</button>
+          </div>
+          <div class="try-response" id="protectorsResponse"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
       <h2>Scan</h2>
       <p>Send a file to be inspected by the Forcepoint Protector</p>
     </div>
@@ -322,6 +369,7 @@
         <table class="params">
           <tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr>
           <tr><td class="name">file</td><td class="type">binary</td><td class="req">required</td><td>The file to scan. Rejected above the configured max size.</td></tr>
+          <tr><td class="name">protectorId</td><td class="type">text</td><td></td><td>Which configured Protector to send to (see <code>GET /api/protectors</code>). Defaults to <code>PROTECTOR_DEFAULT</code>. Unknown id → 400.</td></tr>
         </table>
 
         <div class="subhead">Example response — 200 OK</div>
@@ -347,7 +395,11 @@
   <span class="k">"maxNumberOfMatches"</span>: <span class="n">1</span>,
   <span class="k">"elapsedMs"</span>: <span class="n">80</span>,
   <span class="k">"fileName"</span>: <span class="s">"file.txt"</span>,
-  <span class="k">"fileSizeBytes"</span>: <span class="n">73</span>
+  <span class="k">"fileSizeBytes"</span>: <span class="n">73</span>,
+  <span class="k">"source"</span>: { <span class="k">"host_ips"</span>: [<span class="s">"10.20.4.51"</span>], <span class="k">"host_name"</span>: <span class="s">"FINANCE-PC-01"</span> },
+  <span class="k">"dataChannel"</span>: <span class="s">"HTTP"</span>,
+  <span class="k">"protectorId"</span>: <span class="s">"1"</span>,
+  <span class="k">"protectorName"</span>: <span class="s">"Production"</span>
 }</pre>
         <button type="button" class="pre-copy-btn" aria-label="Copy to clipboard">
           <span class="icon-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></span>
@@ -492,6 +544,10 @@
       <span class="k">"elapsedMs"</span>: <span class="n">84</span>,
       <span class="k">"fileName"</span>: <span class="s">"file.pdf"</span>,
       <span class="k">"fileSizeBytes"</span>: <span class="n">18</span>,
+      <span class="k">"source"</span>: { <span class="k">"host_name"</span>: <span class="s">"FINANCE-PC-01"</span> },
+      <span class="k">"dataChannel"</span>: <span class="s">"HTTP"</span>,
+      <span class="k">"protectorId"</span>: <span class="s">"1"</span>,
+      <span class="k">"protectorName"</span>: <span class="s">"Production"</span>,
       <span class="k">"httpStatus"</span>: <span class="n">200</span>
     }
   ],
@@ -564,6 +620,7 @@
           <tr><td class="name">metadata</td><td class="type">text</td><td class="req">required</td><td>Raw metadata JSON (context/contentDescriptors/source/destinations) — not built by this app</td></tr>
           <tr><td class="name">file</td><td class="type">binary</td><td class="req">required</td><td>The file to send</td></tr>
           <tr><td class="name">wrap</td><td class="type">"true"/"false"</td><td></td><td>Default true. Set false to send raw file bytes instead of the HTTP-wrapped envelope — demonstrates why it always reports 0 matches</td></tr>
+          <tr><td class="name">protectorId</td><td class="type">text</td><td></td><td>Which configured Protector to send to (see <code>GET /api/protectors</code>). Defaults to <code>PROTECTOR_DEFAULT</code>.</td></tr>
         </table>
 
         <div class="subhead">Try it out</div>
@@ -675,6 +732,31 @@
         healthResponseEl.innerHTML = `<div class="try-error">Network error: ${escapeHtml(err.message)}</div>`;
       } finally {
         healthExecuteBtn.disabled = false;
+      }
+    });
+  }
+
+  // --- "Try it out" panel: Protectors ---
+  const protectorsExecuteBtn = document.getElementById('protectorsExecuteBtn');
+  const protectorsResponseEl = document.getElementById('protectorsResponse');
+
+  if (protectorsExecuteBtn) {
+    protectorsExecuteBtn.addEventListener('click', async () => {
+      protectorsExecuteBtn.disabled = true;
+      protectorsResponseEl.innerHTML = '<div class="try-loading">Checking…</div>';
+      const startedAt = performance.now();
+
+      try {
+        const res = await fetch('/api/protectors');
+        const elapsedMs = Math.round(performance.now() - startedAt);
+        const data = await res.json();
+        protectorsResponseEl.innerHTML =
+          `<div class="try-status ${res.ok ? 'ok' : 'err'}">HTTP ${res.status} · ${elapsedMs}ms · ${(data.protectors || []).length} configured</div>` +
+          preBlockHtml(escapeHtml(JSON.stringify(data, null, 2)));
+      } catch (err) {
+        protectorsResponseEl.innerHTML = `<div class="try-error">Network error: ${escapeHtml(err.message)}</div>`;
+      } finally {
+        protectorsExecuteBtn.disabled = false;
       }
     });
   }

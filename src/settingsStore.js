@@ -11,10 +11,12 @@ const DATA_CHANNEL_OPTIONS = [
   'CASB_DISCOVERY', 'NETWORK_DISCOVERY', 'CASB_API', 'EMAIL',
 ];
 
+const WEBHOOK_FORMAT_OPTIONS = ['generic', 'slack', 'teams'];
+
 // Fallback used whenever a field's override is disabled (or never set).
 const DEFAULTS = {
   maxFileSizeMb: config.maxFileSizeMb,
-  requestTimeoutMs: config.protector.timeoutMs,
+  requestTimeoutMs: config.requestTimeoutMs,
   // Source object (see Forcepoint Inspection API "Source Object" spec) - used by
   // the Protector to match a policy's Source condition (network/computer).
   hostIps: '', // disabled = auto-detect from the incoming request's IP
@@ -25,6 +27,13 @@ const DEFAULTS = {
   // Log classifies the request (e.g. HTTP/HTTPS both land under "Network" in our
   // environment; other values land under different channels a policy may not cover).
   dataChannel: 'HTTP',
+  // Fire-and-forget HTTP POST sent when a scan resolves to BLOCK. Reuses this
+  // field's own enabled flag as "is alerting on" - disabled = no webhook at all
+  // (webhookUrl empty), rather than a second on/off toggle. See webhookNotifier.js.
+  webhookUrl: '',
+  // Payload shape for the webhook body - 'generic' (plain JSON), 'slack' or 'teams'
+  // (their respective incoming-webhook formats). Only meaningful once webhookUrl is set.
+  webhookFormat: 'generic',
 };
 
 const FIELD_KEYS = Object.keys(DEFAULTS);
@@ -54,6 +63,9 @@ const VALIDATORS = {
     typeof v === 'string' && v.length <= 2048 && /^https?:\/\/.+/i.test(v.trim()) ? v.trim() : undefined,
   destinationHttpHostname: (v) => (typeof v === 'string' && v.trim() && v.length <= 253 ? v.trim() : undefined),
   dataChannel: (v) => (DATA_CHANNEL_OPTIONS.includes(v) ? v : undefined),
+  webhookUrl: (v) =>
+    typeof v === 'string' && v.length <= 2048 && /^https?:\/\/.+/i.test(v.trim()) ? v.trim() : undefined,
+  webhookFormat: (v) => (WEBHOOK_FORMAT_OPTIONS.includes(v) ? v : undefined),
 };
 
 function readOverrides() {
@@ -127,4 +139,4 @@ function updateSettings(partial) {
   return next;
 }
 
-module.exports = { getSettings, getFieldStates, updateSettings, DATA_CHANNEL_OPTIONS };
+module.exports = { getSettings, getFieldStates, updateSettings, DATA_CHANNEL_OPTIONS, WEBHOOK_FORMAT_OPTIONS };

@@ -32,6 +32,45 @@ function guessMimeType(fileName) {
   return EXTENSION_MIME_TYPES[path.extname(fileName).toLowerCase()] || 'application/octet-stream';
 }
 
+// Error codes that mean "this Protector didn't answer" (network/connect/timeout level)
+// as opposed to "this Protector answered, just with an error/unparseable response."
+// Shared by server.js's sanitizeProtectorError/status-code mapping and by
+// inspectFileWithFailover below, so both agree on what counts as failover-worthy.
+const CONNECTION_ERROR_CODES = new Set(['ECONNREFUSED', 'EHOSTUNREACH', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'TIMEOUT']);
+
+function isConnectionClassError(error) {
+  return CONNECTION_ERROR_CODES.has(error.code);
+}
+
+/**
+ * Looks up a configured Protector by id, falling back to the configured default
+ * when no id is given. Throws a clear, mappable error for an unknown id rather
+ * than silently falling back - the caller asked for a specific target.
+ *
+ * @param {string} [protectorId]
+ * @returns {{id: string, name: string, protocol: string, host: string, port: number, token: string, caCert?: Buffer, rejectUnauthorized: boolean}}
+ */
+function resolveProtector(protectorId) {
+  const id = protectorId || config.defaultProtectorId;
+  const protector = config.protectors.find((p) => p.id === id);
+  if (!protector) {
+    throw Object.assign(new Error(`Unknown protectorId: "${protectorId}"`), { code: 'UNKNOWN_PROTECTOR' });
+  }
+  return protector;
+}
+
+/**
+ * Safe-to-expose summary of every configured Protector - id + name (+ disabled state)
+ * only, never host/port/token. Used by GET /api/protectors to populate the "Send to" picker.
+ */
+function listProtectorSummaries() {
+  return config.protectors.map((p) => ({
+    id: p.id,
+    name: p.name,
+    ...(p.disabled ? { disabled: true, unavailableReason: p.unavailableReason } : {}),
+  }));
+}
+
 /**
  * Builds a synthetic captured-HTTP-transaction buffer for the "0" content
  * part, as required by the Inspection API's `application/http` content type:
@@ -71,9 +110,10 @@ function buildHttpWrappedUpload(fileBuffer, fileName) {
  * @param {object} metadata - the full metadata object (context/contentDescriptors/source/destinations)
  * @param {Buffer} filePartBuffer - the exact bytes to send as the "0" form-data part
  * @param {string} fileName - filename to use for the "0" part
+ * @param {object} protector - resolved Protector entry (see resolveProtector) to send to
  * @returns {Promise<{httpStatus: number, body: object, elapsedMs: number}>}
  */
-async function sendToProtector(metadata, filePartBuffer, fileName) {
+async function sendToProtector(metadata, filePartBuffer, fileName, protector) {
   const settings = getSettings();
   const form = new FormData();
   form.append('metadata', JSON.stringify(metadata), {
@@ -87,26 +127,26 @@ async function sendToProtector(metadata, filePartBuffer, fileName) {
 
   const headers = form.getHeaders();
   headers['Content-Length'] = form.getLengthSync();
-  if (config.protector.token) {
-    headers['Authorization'] = `Bearer ${config.protector.token}`;
+  if (protector.token) {
+    headers['Authorization'] = `Bearer ${protector.token}`;
   }
 
   const requestOptions = {
-    protocol: config.protector.protocol === 'https' ? 'https:' : 'http:',
-    hostname: config.protector.host,
-    port: config.protector.port,
+    protocol: protector.protocol === 'https' ? 'https:' : 'http:',
+    hostname: protector.host,
+    port: protector.port,
     path: '/inspection/v4.0',
     method: 'POST',
     headers,
     timeout: settings.requestTimeoutMs,
   };
 
-  if (config.protector.protocol === 'https') {
-    requestOptions.ca = config.protector.caCert;
-    requestOptions.rejectUnauthorized = config.protector.rejectUnauthorized;
+  if (protector.protocol === 'https') {
+    requestOptions.ca = protector.caCert;
+    requestOptions.rejectUnauthorized = protector.rejectUnauthorized;
   }
 
-  const transport = config.protector.protocol === 'https' ? https : http;
+  const transport = protector.protocol === 'https' ? https : http;
   const startedAt = Date.now();
 
   return new Promise((resolve, reject) => {
@@ -153,9 +193,19 @@ async function sendToProtector(metadata, filePartBuffer, fileName) {
  * @param {string} [requestId] - pre-generated id to use as global_message_id, so the
  *   caller can log the same id on both success and failure (network errors, timeouts).
  *   Defaults to a fresh UUID if not supplied.
+ * @param {string} [protectorId] - which configured Protector to send to. Defaults to
+ *   config.defaultProtectorId. Throws (code UNKNOWN_PROTECTOR) if given an unrecognized id.
  * @returns {Promise<{httpStatus: number, body: object, elapsedMs: number, globalMessageId: string}>}
  */
-async function inspectFile(fileBuffer, originalName, clientIp, requestId) {
+async function inspectFile(fileBuffer, originalName, clientIp, requestId, protectorId) {
+  const protector = resolveProtector(protectorId);
+  if (protector.disabled) {
+    throw Object.assign(new Error(`${protector.name} is unavailable: ${protector.unavailableReason}`), {
+      code: 'PROTECTOR_DISABLED',
+      protectorId: protector.id,
+      protectorName: protector.name,
+    });
+  }
   const settings = getSettings();
   const globalMessageId = requestId || crypto.randomUUID();
   const httpWrappedFile = buildHttpWrappedUpload(fileBuffer, originalName);
@@ -203,8 +253,71 @@ async function inspectFile(fileBuffer, originalName, clientIp, requestId) {
     ],
   };
 
-  const result = await sendToProtector(metadata, httpWrappedFile, originalName);
-  return { ...result, globalMessageId, source: metadata.source, dataChannel: metadata.context.data_channel };
+  try {
+    const result = await sendToProtector(metadata, httpWrappedFile, originalName, protector);
+    return {
+      ...result,
+      globalMessageId,
+      source: metadata.source,
+      dataChannel: metadata.context.data_channel,
+      protectorId: protector.id,
+      protectorName: protector.name,
+    };
+  } catch (err) {
+    // Attach which Protector this attempt targeted even on failure (timeout, connection
+    // refused, ...) so a failed scan is still identifiable in history when there's more
+    // than one Protector configured.
+    throw Object.assign(err, { protectorId: protector.id, protectorName: protector.name });
+  }
+}
+
+/**
+ * Same as inspectFile, but when the caller didn't force a specific Protector
+ * (protectorId omitted - the "use the default" case), automatically tries the
+ * next configured, non-disabled Protector if one candidate fails with a
+ * connection-class error (the Protector never answered) rather than failing
+ * the scan outright. An explicit protectorId is always honored as-is - no
+ * failover - so a user deliberately testing "Protector B" via the picker still
+ * gets Protector B's real error, not a silent substitution.
+ *
+ * Only connection-class errors (see isConnectionClassError) trigger trying the
+ * next candidate. Any other error (e.g. INVALID_RESPONSE - the Protector did
+ * answer, just not usefully) fails immediately.
+ *
+ * @param {string} [protectorId]
+ * @returns {Promise<object>} same shape as inspectFile's return, plus
+ *   { failedOver: true, attemptedProtectors: [...] } when a fallback was used.
+ */
+async function inspectFileWithFailover(fileBuffer, originalName, clientIp, requestId, protectorId) {
+  if (protectorId) {
+    return inspectFile(fileBuffer, originalName, clientIp, requestId, protectorId);
+  }
+
+  const enabledIds = config.protectors.filter((p) => !p.disabled).map((p) => p.id);
+  if (!enabledIds.length) {
+    // Nothing enabled at all - let inspectFile produce its normal (PROTECTOR_DISABLED
+    // or similar) error against the configured default rather than duplicating that logic.
+    return inspectFile(fileBuffer, originalName, clientIp, requestId, undefined);
+  }
+  const candidates = enabledIds.includes(config.defaultProtectorId)
+    ? [config.defaultProtectorId, ...enabledIds.filter((id) => id !== config.defaultProtectorId)]
+    : enabledIds;
+
+  const attemptedProtectors = [];
+  let lastError;
+  for (const candidateId of candidates) {
+    try {
+      const result = await inspectFile(fileBuffer, originalName, clientIp, requestId, candidateId);
+      return attemptedProtectors.length ? { ...result, failedOver: true, attemptedProtectors } : result;
+    } catch (err) {
+      attemptedProtectors.push({ protectorId: err.protectorId || candidateId, protectorName: err.protectorName, error: err.code || err.message });
+      lastError = err;
+      if (!isConnectionClassError(err)) {
+        throw err;
+      }
+    }
+  }
+  throw Object.assign(lastError, { attemptedProtectors });
 }
 
 /**
@@ -219,9 +332,19 @@ async function inspectFile(fileBuffer, originalName, clientIp, requestId) {
  * @param {string} fileName
  * @param {boolean} wrap - whether to apply the HTTP-wrap trick (see buildHttpWrappedUpload).
  *   Defaults to true; set false to demonstrate the "raw bytes always produce 0 matches" gotcha.
+ * @param {string} [protectorId] - which configured Protector to send to. Defaults to
+ *   config.defaultProtectorId. Throws (code UNKNOWN_PROTECTOR) if given an unrecognized id.
  * @returns {Promise<{httpStatus: number, body: object, elapsedMs: number}>}
  */
-async function inspectRaw(metadataJsonString, fileBuffer, fileName, wrap = true) {
+async function inspectRaw(metadataJsonString, fileBuffer, fileName, wrap = true, protectorId) {
+  const protector = resolveProtector(protectorId);
+  if (protector.disabled) {
+    throw Object.assign(new Error(`${protector.name} is unavailable: ${protector.unavailableReason}`), {
+      code: 'PROTECTOR_DISABLED',
+      protectorId: protector.id,
+      protectorName: protector.name,
+    });
+  }
   let metadata;
   try {
     metadata = JSON.parse(metadataJsonString);
@@ -230,21 +353,23 @@ async function inspectRaw(metadataJsonString, fileBuffer, fileName, wrap = true)
   }
 
   const filePart = wrap ? buildHttpWrappedUpload(fileBuffer, fileName) : fileBuffer;
-  return sendToProtector(metadata, filePart, fileName);
+  return sendToProtector(metadata, filePart, fileName, protector);
 }
 
 /**
- * Quick TCP reachability check against the configured Protector host/port -
+ * Quick TCP reachability check against one configured Protector's host/port -
  * does NOT send an actual inspection request (no side effects, no dependency
- * on a valid metadata payload). Used by GET /api/health.
+ * on a valid metadata payload). Used by GET /api/health and GET /api/protectors.
  *
+ * @param {string} [protectorId] - defaults to config.defaultProtectorId
  * @param {number} timeoutMs
  * @returns {Promise<{reachable: boolean, elapsedMs: number, error?: string}>}
  */
-function checkProtectorReachability(timeoutMs = 3000) {
+function checkProtectorReachability(protectorId, timeoutMs = 3000) {
+  const protector = resolveProtector(protectorId);
   return new Promise((resolve) => {
     const startedAt = Date.now();
-    const socket = net.connect({ host: config.protector.host, port: config.protector.port });
+    const socket = net.connect({ host: protector.host, port: protector.port });
 
     const finish = (reachable, error) => {
       socket.destroy();
@@ -258,4 +383,13 @@ function checkProtectorReachability(timeoutMs = 3000) {
   });
 }
 
-module.exports = { inspectFile, inspectRaw, buildHttpWrappedUpload, checkProtectorReachability };
+module.exports = {
+  inspectFile,
+  inspectFileWithFailover,
+  inspectRaw,
+  buildHttpWrappedUpload,
+  checkProtectorReachability,
+  listProtectorSummaries,
+  resolveProtector,
+  isConnectionClassError,
+};

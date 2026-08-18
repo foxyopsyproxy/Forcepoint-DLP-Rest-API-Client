@@ -38,6 +38,37 @@ cp .env.example .env
 | `PORT` | The port this local server listens on |
 | `LOG_FILE_PATH` | Path to the request log file (JSON lines) |
 
+### Sending to more than one Protector
+
+If you have multiple Forcepoint Protector appliances (e.g. production + staging, or one per
+customer environment), replace the plain `PROTECTOR_*` vars above with numbered ones —
+`PROTECTOR_1_HOST`, `PROTECTOR_1_PORT`, `PROTECTOR_1_PROTOCOL`, etc. (same field names, just
+prefixed with a number), repeated for `PROTECTOR_2_*`, `PROTECTOR_3_*`, and so on. Add
+`PROTECTOR_1_NAME=Production` (etc.) to give each one a friendly label, and set
+`PROTECTOR_DEFAULT=1` to say which one is used when a scan doesn't specify one.
+
+```bash
+PROTECTOR_1_NAME=Production
+PROTECTOR_1_HOST=10.20.4.10
+PROTECTOR_1_PORT=8080
+PROTECTOR_1_PROTOCOL=http
+
+PROTECTOR_2_NAME=Staging
+PROTECTOR_2_HOST=10.20.5.10
+PROTECTOR_2_PORT=8080
+PROTECTOR_2_PROTOCOL=http
+
+PROTECTOR_DEFAULT=1
+```
+
+Once configured, a "Send to Protector" picker appears on the Scan screen (with a live
+reachable/unreachable indicator per Protector), and every past scan in History/Verdict Detail
+shows which one it went to. As always, the browser only ever sees each Protector's id and the
+name you gave it here — never its host, port, or token.
+
+If only the plain `PROTECTOR_HOST` (no number) is set, that's still supported unchanged as a
+single Protector — you don't need to migrate an existing `.env` to start using this app.
+
 ## Settings screen
 
 Clicking the ⚙️ button in the top-right of the UI opens a Settings screen where you can change,
@@ -127,7 +158,7 @@ as usual to `logs/requests.log.jsonl` per `LOG_FILE_PATH`.
 ## Project structure
 
 ```
-server.js                # Express app + endpoints GET /api/health, POST /api/scan, GET /api/history[/:id], GET/POST /api/settings
+server.js                # Express app + endpoints GET /api/health, GET /api/protectors, POST /api/scan, GET /api/history[/:id], GET/POST /api/settings
 src/config.js            # Loads configuration from .env (Protector connection)
 src/settingsStore.js     # Safe runtime settings editable via the UI, saved in data/settings.json
 src/protectorClient.js   # Builds and sends the Inspection API request to the Protector

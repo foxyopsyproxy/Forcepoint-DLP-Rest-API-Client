@@ -169,6 +169,15 @@
   .home-grid { display: grid; grid-template-columns: 1fr 340px; gap: 22px; align-items: start; }
   @media (max-width: 980px) { .home-grid { grid-template-columns: 1fr; } }
 
+  .protector-picker { display: flex; align-items: center; gap: 12px; }
+  .protector-picker label { font: 600 11px/1 var(--sans); letter-spacing: 0.10em; text-transform: uppercase; color: var(--ink-dim); flex-shrink: 0; }
+  .protector-picker select {
+    flex: 1; max-width: 320px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); color: var(--ink);
+    font: 600 13px/1 var(--sans); padding: 10px 12px; border-radius: 8px; cursor: pointer; outline: none;
+  }
+  .protector-picker select:focus-visible { border-color: var(--bw-teal-400); }
+  .protector-picker select option { background: var(--bw-navy-900); color: var(--ink); }
+
   .dropzone-wrap { position: relative; }
   .dropzone {
     position: relative; overflow: hidden; padding: 40px 24px; border-radius: 12px;
@@ -211,6 +220,13 @@
   .remove-btn:focus-visible { outline: 2px solid var(--bw-teal-400); outline-offset: 2px; }
   .remove-btn svg { width: 16px; height: 16px; stroke-width: 2; }
 
+  .file-queue { display: flex; flex-direction: column; gap: 8px; }
+  .file-queue .selected-file { display: flex; }
+  .file-queue .selected-file.clickable { cursor: pointer; }
+  .file-queue .selected-file.clickable:hover { background: rgba(255,255,255,0.09); }
+  .badge.queued { color: var(--ink-dim); background: rgba(255,255,255,0.08); border: 1px solid var(--line); }
+  .badge.scanning { color: var(--bw-teal-400); background: rgba(60,190,196,0.14); border: 1px solid rgba(60,190,196,0.35); }
+
   .actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .scan-visual { display: none; align-items: center; gap: 12px; }
   .scan-visual.active { display: flex; }
@@ -235,17 +251,51 @@
   .kv-row .locked { display: inline-flex; align-items: center; gap: 6px; color: var(--bw-steel-400); }
   .kv-row .locked svg { width: 13px; height: 13px; stroke-width: 1.75; }
 
+  .recent-head-row {
+    display: grid; gap: 16px; align-items: center; padding: 2px 0 10px;
+    font: 600 10px/1 var(--sans); letter-spacing: 0.10em; text-transform: uppercase; color: var(--ink-dim);
+  }
   .recent-row {
-    display: flex; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid var(--line-soft); cursor: pointer;
+    display: grid; gap: 16px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line-soft); cursor: pointer;
   }
   .recent-row:hover { background: rgba(255,255,255,0.04); }
-  .recent-row .t { width: 100px; font: 500 12px/1 var(--mono); color: var(--ink-dim); flex-shrink: 0; }
-  .recent-row .f { flex: 1; min-width: 0; font: 600 13px/1 var(--sans); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .recent-row .s { width: 74px; font: 500 12px/1 var(--sans); color: var(--ink-dim); flex-shrink: 0; }
-  .recent-row .src { width: 130px; font: 500 12px/1 var(--mono); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
-  .recent-row .ch { width: 90px; font: 600 11px/1 var(--sans); letter-spacing: 0.04em; color: var(--ink-muted); flex-shrink: 0; }
-  .recent-row .p { width: 220px; font: 500 12px/1 var(--sans); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
   .empty-note { font: 500 13px/1.5 var(--sans); color: var(--ink-dim); padding: 8px 0; }
+
+  /* ---------- shared data-table cells (Recent Scans + History) ---------- */
+  /* min-width: 0 on every cell overrides Grid's default auto-min-size, which would
+     otherwise let a track's content force it wider than its declared px size (at the
+     expense of the 1fr File column) - the same failure mode as the earlier flex bug. */
+  .recent-head-row > *, .table-head-row > *, .recent-row > *, .table-body-row > * { min-width: 0; }
+  .cell-time { font: 500 12px/1 var(--mono); color: var(--ink-dim); }
+  .cell-file { font: 600 13px/1.3 var(--sans); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-size { font: 500 12px/1 var(--sans); color: var(--ink-dim); }
+  .cell-protector { font: 600 12px/1.3 var(--sans); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-source { font: 500 12px/1 var(--mono); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-channel { font: 600 11px/1 var(--sans); letter-spacing: 0.04em; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-policy { font: 500 12px/1.4 var(--sans); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-matches { font: 600 13px/1 var(--sans); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-elapsed { font: 500 12px/1 var(--mono); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-resolution { justify-self: start; }
+
+  /* ---------- column picker ---------- */
+  .icon-btn {
+    width: 32px; height: 32px; flex-shrink: 0; border-radius: 8px; border: 1px solid var(--line); background: rgba(255,255,255,0.05);
+    color: var(--ink-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: color .15s, border-color .15s;
+  }
+  .icon-btn:hover { color: var(--ink); border-color: var(--bw-teal-400); }
+  .icon-btn:focus-visible { outline: 2px solid var(--bw-teal-400); outline-offset: 2px; }
+  .icon-btn svg { width: 16px; height: 16px; stroke-width: 1.75; }
+  .column-picker {
+    position: fixed; z-index: 50; width: 220px; padding: 14px; border-radius: 12px;
+    background: var(--bw-navy-900); border: 1px solid var(--line); box-shadow: 0 18px 40px rgba(2,6,23,0.5);
+    display: none; flex-direction: column; gap: 8px;
+    max-height: calc(100vh - 24px); overflow-y: auto;
+  }
+  .column-picker.visible { display: flex; }
+  .column-picker-title { font: 600 10px/1 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 2px; }
+  .column-picker label { display: flex; align-items: center; gap: 9px; font: 500 13px/1 var(--sans); color: var(--ink); cursor: pointer; padding: 4px 2px; }
+  .column-picker input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--bw-teal-400); cursor: pointer; flex-shrink: 0; }
+  .column-picker-note { font: 500 11px/1.4 var(--sans); color: var(--ink-dim); margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 
   /* ---------- History ---------- */
   .view-head { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
@@ -270,7 +320,6 @@
 
   .table-panel { padding: 0; overflow: hidden; }
   .table-scroll { overflow-x: auto; }
-  .table-cols { grid-template-columns: 130px 1fr 70px 90px 130px 90px 190px 70px 90px; }
   .table-head-row {
     background: rgba(2,6,23,0.45); border-bottom: 1px solid var(--line);
     font: 600 10px/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-dim);
@@ -278,15 +327,43 @@
   }
   .table-body-row { display: grid; gap: 12px; align-items: center; padding: 15px 20px; border-top: 1px solid var(--line-soft); cursor: pointer; min-width: fit-content; }
   .table-body-row:hover { background: rgba(60,190,196,0.07); }
-  .table-body-row .c-time { font: 500 12px/1 var(--mono); color: var(--ink-dim); }
-  .table-body-row .c-file { font: 600 13px/1.3 var(--sans); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .table-body-row .c-size { font: 500 12px/1 var(--sans); color: var(--ink-dim); }
-  .table-body-row .c-source { font: 500 12px/1 var(--mono); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .table-body-row .c-channel { font: 600 11px/1 var(--sans); letter-spacing: 0.04em; color: var(--ink-muted); }
-  .table-body-row .c-policy { font: 500 12px/1.4 var(--sans); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .table-body-row .c-matches { font: 600 13px/1 var(--sans); color: var(--ink); }
-  .table-body-row .c-elapsed { font: 500 12px/1 var(--mono); color: var(--ink-muted); }
   .table-note { font: 500 12px/1.5 var(--sans); color: var(--ink-dim); margin: 0; }
+
+  .head-sort-btn {
+    font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit;
+    background: none; border: none; padding: 0; cursor: pointer; text-align: left; justify-self: start;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .head-sort-btn:hover, .head-sort-btn.active { color: var(--ink); }
+  .head-sort-btn:focus-visible { outline: 2px solid var(--bw-teal-400); outline-offset: 2px; }
+  .head-sort-btn .caret { font-size: 9px; }
+
+  .history-pager { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--line-soft); }
+  .history-pager button {
+    font: 600 11px/1 var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-dim);
+    background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  }
+  .history-pager button:hover:not(:disabled) { color: var(--ink); border-color: rgba(60,190,196,0.38); }
+  .history-pager button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .history-pager .page-info { font: 500 12px/1 var(--sans); color: var(--ink-dim); }
+
+  /* ---------- Analytics ---------- */
+  .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .analytics-full { grid-column: 1 / -1; }
+  .chart-svg { width: 100%; height: auto; display: block; }
+  .chart-legend { display: flex; gap: 18px; font: 600 11px/1 var(--sans); letter-spacing: 0.04em; color: var(--ink-dim); margin: 4px 0 10px; }
+  .chart-legend .lg-total::before { content: ''; }
+  .chart-legend .lg-total { color: #A9EEF1; }
+  .chart-legend .lg-blocked { color: var(--block); }
+  .chart-line-total { stroke: #3CBEC4; stroke-width: 2; }
+  .chart-line-blocked { stroke: var(--block); stroke-width: 2; }
+  .chart-dot { fill: #3CBEC4; }
+  .chart-dot-blocked { fill: var(--block); }
+  .chart-axis-label { font: 500 9px/1 var(--sans); fill: var(--ink-muted); }
+  .chart-bar { fill: rgba(60,190,196,0.55); }
+  .chart-bar:hover { fill: rgba(60,190,196,0.8); }
+  .chart-label { font: 500 11px/1 var(--sans); fill: var(--ink-dim); }
+  .chart-value { font: 600 11px/1 var(--mono); fill: var(--ink); }
 
   /* ---------- Detail ---------- */
   .back-link {
@@ -411,6 +488,18 @@
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---------- Print (Verdict Detail / History "Print / Save as PDF") ---------- */
+  @media print {
+    .rail, .topbar, .history-controls, .column-picker, .history-pager, .no-print { display: none !important; }
+    body, .main, .table-scroll { overflow: visible !important; height: auto !important; }
+    .content { overflow: visible !important; }
+    .view { display: none !important; }
+    .view.active { display: block !important; }
+    .table-body-row, .recent-row { break-inside: avoid; }
+    body { background: #fff !important; color: #000 !important; }
+    .panel, .table-panel, .stat-card, .response-panel { background: #fff !important; border-color: #ccc !important; color: #000 !important; box-shadow: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -433,6 +522,10 @@
       <button class="rail-btn" data-view="detail" id="navDetail">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="11.5" cy="14.5" r="2.5"/><line x1="13.3" y1="16.3" x2="15" y2="18"/></svg>
         <span>Verdict</span>
+      </button>
+      <button class="rail-btn" data-view="analytics" id="navAnalytics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Analytics</span>
       </button>
       <button class="rail-btn" data-view="settings" id="navSettings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
@@ -467,27 +560,23 @@
             <h2>Test a file against policy</h2>
             <p class="panel-sub">The file is relayed to the Protector's Inspection API by this app's backend. It is held in memory only and never written to disk.</p>
 
+            <div class="protector-picker">
+              <label for="protectorSelect">Send to Protector</label>
+              <select id="protectorSelect"></select>
+            </div>
+
             <div class="dropzone-wrap" id="dropzoneWrap">
               <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload a file to scan. Drag and drop a file here, or press Enter to browse.">
                 <div class="dropzone-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 001 1h4"/><path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9.5 14.5 12 12 14.5 14.5"/></svg>
                 </div>
-                <h3>Drag a file here, or click to browse</h3>
-                <div class="hint">Maximum size: <span id="maxSizeHint">30 MB</span></div>
-                <input type="file" id="fileInput">
+                <h3>Drag files here, or click to browse</h3>
+                <div class="hint">Maximum size: <span id="maxSizeHint">30 MB</span> per file</div>
+                <input type="file" id="fileInput" multiple>
               </div>
             </div>
 
-            <div class="selected-file" id="selectedFile">
-              <div class="file-type-icon" id="fileTypeIcon"></div>
-              <div class="file-meta">
-                <div class="name" id="fileName"></div>
-                <div class="size" id="fileSize"></div>
-              </div>
-              <button class="remove-btn" id="removeFile" aria-label="Remove file">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
+            <div class="file-queue" id="fileQueueList"></div>
 
             <div class="actions">
               <button class="btn-primary" id="sendBtn" disabled>
@@ -526,8 +615,12 @@
         <div class="panel">
           <div style="display:flex; align-items:center; gap:12px;">
             <div class="panel-eyebrow" style="color: var(--ink-muted); letter-spacing: 0.16em;">Recent scans</div>
+            <button class="icon-btn" id="columnsBtnHome" aria-label="Choose columns" title="Choose columns">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </button>
             <button class="link-btn" style="margin-left:auto;" data-view="history">View all →</button>
           </div>
+          <div class="recent-head-row" id="recentHeadRow"></div>
           <div id="recentScansList"></div>
         </div>
       </section>
@@ -547,20 +640,29 @@
             <div class="segmented" id="historyFilter">
               <button class="active" data-filter="all" type="button">All</button>
               <button data-filter="block" type="button">Block</button>
-              <button data-filter="allow" type="button">Allow</button>
+              <button data-filter="warn" type="button">Flagged</button>
+              <button data-filter="pass" type="button">Allow</button>
             </div>
+            <button class="icon-btn" id="historyExportBtn" aria-label="Export CSV" title="Export filtered results as CSV">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+            <button class="icon-btn" id="historyPrintBtn" aria-label="Print / Save as PDF" title="Print / Save as PDF">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            </button>
+            <button class="icon-btn" id="columnsBtnHistory" aria-label="Choose columns" title="Choose columns">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </button>
           </div>
         </div>
 
         <div class="panel table-panel">
           <div class="table-scroll">
-            <div class="table-head-row table-cols">
-              <span>Timestamp</span><span>File</span><span>Size</span><span>Resolution</span><span>Source</span><span>Channel</span><span>Policy</span><span>Matches</span><span>Elapsed</span>
-            </div>
+            <div class="table-head-row" id="historyHeadRow"></div>
             <div id="historyRows"></div>
           </div>
+          <div class="history-pager" id="historyPager"></div>
         </div>
-        <p class="table-note">Rows are read from the local JSON-lines log. File contents are never stored — only name, size, resolution and timing.</p>
+        <p class="table-note">Backed by a local SQLite database. File contents are never stored — only name, size, resolution and timing.</p>
       </section>
 
       <!-- ===================== VERDICT DETAIL ===================== -->
@@ -686,6 +788,35 @@
             </div>
           </div>
 
+          <div class="panel">
+            <div class="settings-group-title">Alerting</div>
+            <div class="settings-group-note">Fires a one-shot HTTP POST whenever a scan resolves to BLOCK. Delivery is best-effort — a failed or slow webhook never affects the scan itself.</div>
+            <div class="field-grid">
+              <div class="field-col" id="col-webhookUrl">
+                <div class="field-toggle-row">
+                  <input type="checkbox" class="field-toggle" id="enable-webhookUrl">
+                  <label for="input-webhookUrl">Webhook URL</label>
+                </div>
+                <div class="field-input-row">
+                  <input type="text" id="input-webhookUrl" maxlength="2048" placeholder="https://hooks.slack.com/services/...">
+                </div>
+                <div class="field-hint">Off = no webhook is sent.</div>
+                <div class="field-error">Must be a valid http(s):// URL.</div>
+              </div>
+              <div class="field-col" id="col-webhookFormat">
+                <div class="field-toggle-row">
+                  <input type="checkbox" class="field-toggle" id="enable-webhookFormat">
+                  <label for="input-webhookFormat">Payload format</label>
+                </div>
+                <div class="field-input-row">
+                  <select id="input-webhookFormat"></select>
+                </div>
+                <div class="field-hint">Off = generic (the scan's own JSON shape).</div>
+                <div class="field-error">Must be one of the supported formats.</div>
+              </div>
+            </div>
+          </div>
+
           <div class="lock-notice">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
             <div>
@@ -702,16 +833,61 @@
         </div>
       </section>
 
+      <!-- ===================== ANALYTICS ===================== -->
+      <section class="view" id="view-analytics">
+        <div class="view-head">
+          <div>
+            <div class="panel-eyebrow">Dashboard</div>
+            <h2>Analytics</h2>
+          </div>
+        </div>
+        <div class="analytics-grid">
+          <div class="panel analytics-full">
+            <div class="settings-group-title">Scans &amp; blocks over time</div>
+            <div class="chart-legend"><span class="lg-total">— Total scans</span><span class="lg-blocked">— Blocked</span></div>
+            <div id="chartTrend"></div>
+          </div>
+          <div class="panel">
+            <div class="settings-group-title">Volume by Protector</div>
+            <div id="chartByProtector"></div>
+          </div>
+          <div class="panel">
+            <div class="settings-group-title">Volume by data channel</div>
+            <div id="chartByChannel"></div>
+          </div>
+          <div class="panel">
+            <div class="settings-group-title">Top violated policies</div>
+            <div id="chartTopPolicies"></div>
+          </div>
+          <div class="panel">
+            <div class="settings-group-title">Top violated rules</div>
+            <div id="chartTopRules"></div>
+          </div>
+        </div>
+      </section>
+
     </div>
   </div>
+</div>
+
+<div class="column-picker" id="columnPicker">
+  <div class="column-picker-title">Show columns</div>
+  <label><input type="checkbox" data-col="size"> Size</label>
+  <label><input type="checkbox" data-col="protector"> Protector</label>
+  <label><input type="checkbox" data-col="source"> Source</label>
+  <label><input type="checkbox" data-col="channel"> Channel</label>
+  <label><input type="checkbox" data-col="policy"> Policy</label>
+  <label><input type="checkbox" data-col="matches"> Matches</label>
+  <label><input type="checkbox" data-col="elapsed"> Elapsed</label>
+  <div class="column-picker-note">Time, File, and Resolution are always shown.</div>
 </div>
 
 <script>
   // =====================================================================
   // Navigation
   // =====================================================================
-  const views = { home: document.getElementById('view-home'), history: document.getElementById('view-history'), detail: document.getElementById('view-detail'), settings: document.getElementById('view-settings') };
-  const navButtons = { home: document.getElementById('navHome'), history: document.getElementById('navHistory'), detail: document.getElementById('navDetail'), settings: document.getElementById('navSettings') };
+  const views = { home: document.getElementById('view-home'), history: document.getElementById('view-history'), detail: document.getElementById('view-detail'), settings: document.getElementById('view-settings'), analytics: document.getElementById('view-analytics') };
+  const navButtons = { home: document.getElementById('navHome'), history: document.getElementById('navHistory'), detail: document.getElementById('navDetail'), settings: document.getElementById('navSettings'), analytics: document.getElementById('navAnalytics') };
 
   let currentView = 'home';
   let previousViewBeforeDetail = 'home';
@@ -724,13 +900,13 @@
     if (name === 'history') loadHistory();
     if (name === 'settings') openSettings();
     if (name === 'detail') renderDetail(currentDetailEntry);
+    if (name === 'analytics') loadAnalytics();
   }
 
   Object.entries(navButtons).forEach(([key, btn]) => btn.addEventListener('click', () => setView(key)));
   document.querySelectorAll('[data-view]').forEach((el) => {
-    if (el.tagName === 'BUTTON' && !navButtons[el.dataset.view]) {
-      el.addEventListener('click', () => setView(el.dataset.view));
-    }
+    if (navButtons[el.dataset.view] === el) return; // already wired above
+    el.addEventListener('click', () => setView(el.dataset.view));
   });
 
   document.getElementById('detailBackBtn').addEventListener('click', () => setView(previousViewBeforeDetail));
@@ -769,9 +945,30 @@
     </button>`;
   }
 
+  function downloadButtonHtml(text, filename) {
+    return `<button type="button" class="copy-btn" data-download="${escapeHtml(text)}" data-filename="${escapeHtml(filename)}">
+      <span style="display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+      Download
+    </button>`;
+  }
+
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('.copy-btn');
     if (!btn) return;
+
+    if (btn.dataset.download !== undefined) {
+      const blob = new Blob([btn.dataset.download], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = btn.dataset.filename || 'scan-result.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
     const text = btn.dataset.copy;
     const showCopied = () => { btn.classList.add('copied'); setTimeout(() => btn.classList.remove('copied'), 1200); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -841,71 +1038,224 @@
     return 'pass';
   }
 
+  // __retryFile (a live File object, attached only to scans run in this session -
+  // see scanQueueItem) isn't meaningful JSON and must never appear in the exported/
+  // copied/displayed response - it's UI-only bookkeeping for the Retry button.
+  function entryJson(entry) {
+    return JSON.stringify(entry, (key, value) => (key === '__retryFile' ? undefined : value), 2);
+  }
+
   // =====================================================================
-  // Scan Home - dropzone / file select / send
+  // Scan Home - dropzone / file queue / send
   // =====================================================================
   const dropzoneWrap = document.getElementById('dropzoneWrap');
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');
-  const selectedFileEl = document.getElementById('selectedFile');
-  const fileNameEl = document.getElementById('fileName');
-  const fileSizeEl = document.getElementById('fileSize');
-  const fileTypeIconEl = document.getElementById('fileTypeIcon');
-  const removeFileBtn = document.getElementById('removeFile');
+  const fileQueueEl = document.getElementById('fileQueueList');
   const sendBtn = document.getElementById('sendBtn');
   const scanVisual = document.getElementById('scanVisual');
   const scanStatus = document.getElementById('scanStatus');
   const actionNote = document.getElementById('actionNote');
 
-  let selectedFile = null;
+  const MAX_CONCURRENT_SCANS = 3;
+  let fileQueue = []; // [{ id, file, status: 'queued'|'scanning'|'done'|'error', entry }]
   let effectiveMaxFileSizeMb = null;
+  let selectedProtectorId = localStorage.getItem('selectedProtectorId') || null;
+  let queueRunning = false;
 
-  function setFile(file) {
-    selectedFile = file;
-    fileNameEl.textContent = file.name;
-    fileSizeEl.textContent = formatBytes(file.size);
-    fileTypeIconEl.innerHTML = getFileIconSvg(file.name);
-    selectedFileEl.classList.add('visible');
-    actionNote.textContent = '';
+  function genId() {
+    return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `f-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
 
-    const tooLarge = effectiveMaxFileSizeMb && file.size > effectiveMaxFileSizeMb * 1024 * 1024;
-    selectedFileEl.classList.toggle('invalid', !!tooLarge);
-    if (tooLarge) {
-      sendBtn.disabled = true;
-      actionNote.textContent = `This file is ${formatBytes(file.size)}, which exceeds the maximum allowed size (${effectiveMaxFileSizeMb}MB).`;
-    } else {
-      sendBtn.disabled = false;
+  function fileTooLarge(file) {
+    return !!(effectiveMaxFileSizeMb && file.size > effectiveMaxFileSizeMb * 1024 * 1024);
+  }
+
+  function addFilesToQueue(fileList) {
+    const files = Array.from(fileList);
+    if (!files.length) return;
+    for (const file of files) {
+      fileQueue.push({ id: genId(), file, status: 'queued', entry: null });
     }
+    renderFileQueue();
   }
 
-  function clearFile() {
-    selectedFile = null;
-    fileInput.value = '';
-    selectedFileEl.classList.remove('visible');
-    selectedFileEl.classList.remove('invalid');
-    sendBtn.disabled = true;
-    actionNote.textContent = '';
+  function removeFromQueue(id) {
+    fileQueue = fileQueue.filter((item) => item.id !== id);
+    renderFileQueue();
   }
 
-  dropzone.addEventListener('click', () => fileInput.click());
-  dropzone.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+  function queueStatusBadge(item) {
+    if (item.status === 'queued') return `<span class="badge queued">Queued</span>`;
+    if (item.status === 'scanning') return `<span class="badge scanning">Scanning…</span>`;
+    if (item.status === 'error') return `<span class="badge block">Error</span>`;
+    const level = classifyEntry(item.entry);
+    const label = level === 'block' ? 'Block' : level === 'warn' ? 'Flagged' : 'Allow';
+    const cls = level === 'block' ? 'block' : level === 'warn' ? 'warn' : 'allow';
+    return `<span class="badge ${cls}">${label}</span>`;
+  }
+
+  function renderFileQueue() {
+    if (!fileQueue.length) {
+      fileQueueEl.innerHTML = '';
+      sendBtn.disabled = true;
+      actionNote.textContent = '';
+      return;
+    }
+    fileQueueEl.innerHTML = fileQueue.map((item) => {
+      const clickable = item.status === 'done' || item.status === 'error';
+      const tooLarge = item.status === 'queued' && fileTooLarge(item.file);
+      const sizeText = tooLarge
+        ? `${formatBytes(item.file.size)} · exceeds ${effectiveMaxFileSizeMb}MB limit`
+        : formatBytes(item.file.size);
+      const removeLabel = item.status === 'queued' ? 'Remove file' : 'Remove from list';
+      const removeDisabled = item.status === 'scanning' ? ' disabled' : '';
+      return `<div class="selected-file visible ${(tooLarge || item.status === 'error') ? 'invalid' : ''} ${clickable ? 'clickable' : ''}" data-id="${item.id}">
+        <div class="file-type-icon">${getFileIconSvg(item.file.name)}</div>
+        <div class="file-meta">
+          <div class="name">${escapeHtml(item.file.name)}</div>
+          <div class="size">${sizeText}</div>
+        </div>
+        ${queueStatusBadge(item)}
+        <button class="remove-btn" data-remove="${item.id}" aria-label="${removeLabel}"${removeDisabled}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>`;
+    }).join('');
+
+    const hasSendable = fileQueue.some((item) => item.status === 'queued' && !fileTooLarge(item.file));
+    sendBtn.disabled = queueRunning || !hasSendable;
+
+    const anyTooLarge = fileQueue.some((item) => item.status === 'queued' && fileTooLarge(item.file));
+    actionNote.textContent = anyTooLarge ? `One or more files exceed the maximum allowed size (${effectiveMaxFileSizeMb}MB) and won't be sent.` : '';
+  }
+
+  fileQueueEl.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('[data-remove]');
+    if (removeBtn) {
+      e.stopPropagation();
+      if (queueRunning) return;
+      removeFromQueue(removeBtn.dataset.remove);
+      return;
+    }
+    const row = e.target.closest('.selected-file.clickable');
+    if (!row) return;
+    const item = fileQueue.find((i) => i.id === row.dataset.id);
+    if (!item || !item.entry) return;
+    currentDetailEntry = item.entry;
+    previousViewBeforeDetail = 'home';
+    setView('detail');
   });
-  fileInput.addEventListener('change', () => { if (fileInput.files.length) setFile(fileInput.files[0]); });
+
+  dropzone.addEventListener('click', () => { if (!queueRunning) fileInput.click(); });
+  dropzone.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && !queueRunning) { e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files.length) addFilesToQueue(fileInput.files); fileInput.value = ''; });
 
   ['dragenter', 'dragover'].forEach((evt) => dropzone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); dropzoneWrap.classList.add('dragover'); }));
   ['dragleave', 'drop'].forEach((evt) => dropzone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); dropzoneWrap.classList.remove('dragover'); }));
-  dropzone.addEventListener('drop', (e) => { const files = e.dataTransfer.files; if (files.length) setFile(files[0]); });
-
-  removeFileBtn.addEventListener('click', (e) => { e.stopPropagation(); clearFile(); });
+  dropzone.addEventListener('drop', (e) => { if (queueRunning) return; const files = e.dataTransfer.files; if (files.length) addFilesToQueue(files); });
 
   const SCAN_PHRASES = ['Uploading file…', 'Sending to Protector…', 'Matching policy conditions…', 'Awaiting verdict…'];
 
-  sendBtn.addEventListener('click', async () => {
-    if (!selectedFile) return;
+  // Bounded-concurrency worker pool - keeps a fixed appliance from being hit with
+  // one request per queued file all at once; MAX_CONCURRENT_SCANS caps how many
+  // scans are in flight to the Protector at any moment.
+  async function runPool(items, limit, worker) {
+    let idx = 0;
+    const workerCount = Math.min(limit, items.length) || 1;
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (idx < items.length) {
+        await worker(items[idx++]);
+      }
+    }));
+  }
 
+  async function scanQueueItem(item) {
+    item.status = 'scanning';
+    renderFileQueue();
+
+    const formData = new FormData();
+    formData.append('file', item.file);
+    if (selectedProtectorId) formData.append('protectorId', selectedProtectorId);
+
+    try {
+      const res = await fetch('/api/scan', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        item.status = 'error';
+        item.entry = { resolution: null, error: data.error || `Error (HTTP ${res.status})`, fileName: item.file.name, sizeBytes: item.file.size, timestamp: new Date().toISOString() };
+      } else {
+        item.status = 'done';
+        item.entry = { ...data, timestamp: new Date().toISOString() };
+      }
+    } catch (err) {
+      const selected = protectorsList.find((p) => p.id === selectedProtectorId);
+      item.status = 'error';
+      item.entry = {
+        resolution: null,
+        error: 'Network error: unable to reach the server',
+        fileName: item.file.name,
+        sizeBytes: item.file.size,
+        timestamp: new Date().toISOString(),
+        protectorId: selectedProtectorId,
+        protectorName: selected ? selected.name : undefined,
+      };
+    }
+    // Keep the live File around (this session/tab only, never sent to the server as
+    // history) so a "Retry" button on the Verdict Detail screen can resubmit without
+    // the user re-picking the file. Entries opened from History never get this -
+    // their bytes were never retained anywhere, by design.
+    item.entry.__retryFile = item.file;
+    renderFileQueue();
+  }
+
+  async function retryEntry(entry) {
+    const file = entry.__retryFile;
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (selectedProtectorId) formData.append('protectorId', selectedProtectorId);
+
+    let nextEntry;
+    try {
+      const res = await fetch('/api/scan', { method: 'POST', body: formData });
+      const data = await res.json();
+      nextEntry = res.ok
+        ? { ...data, timestamp: new Date().toISOString() }
+        : { resolution: null, error: data.error || `Error (HTTP ${res.status})`, fileName: file.name, sizeBytes: file.size, timestamp: new Date().toISOString() };
+    } catch (err) {
+      const selected = protectorsList.find((p) => p.id === selectedProtectorId);
+      nextEntry = {
+        resolution: null,
+        error: 'Network error: unable to reach the server',
+        fileName: file.name,
+        sizeBytes: file.size,
+        timestamp: new Date().toISOString(),
+        protectorId: selectedProtectorId,
+        protectorName: selected ? selected.name : undefined,
+      };
+    }
+    nextEntry.__retryFile = file;
+    currentDetailEntry = nextEntry;
+    renderDetail(currentDetailEntry);
+    loadHomeExtras();
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#retryScanBtn')) return;
+    if (!currentDetailEntry || !currentDetailEntry.__retryFile) return;
+    retryEntry(currentDetailEntry);
+  });
+
+  sendBtn.addEventListener('click', async () => {
+    const toSend = fileQueue.filter((item) => item.status === 'queued' && !fileTooLarge(item.file));
+    if (!toSend.length || queueRunning) return;
+
+    queueRunning = true;
     sendBtn.disabled = true;
-    actionNote.textContent = '';
     scanVisual.classList.add('active');
     let phraseIndex = 0;
     scanStatus.textContent = SCAN_PHRASES[0];
@@ -914,30 +1264,24 @@
       scanStatus.textContent = SCAN_PHRASES[phraseIndex];
     }, 900);
 
-    const formData = new FormData();
-    formData.append('file', selectedFile);
+    await runPool(toSend, MAX_CONCURRENT_SCANS, scanQueueItem);
 
-    try {
-      const res = await fetch('/api/scan', { method: 'POST', body: formData });
-      const data = await res.json();
+    clearInterval(phraseTimer);
+    scanVisual.classList.remove('active');
+    queueRunning = false;
+    loadHomeExtras();
 
-      if (!res.ok) {
-        currentDetailEntry = { resolution: null, error: data.error || `Error (HTTP ${res.status})`, fileName: selectedFile.name, sizeBytes: selectedFile.size, timestamp: new Date().toISOString() };
-      } else {
-        currentDetailEntry = { ...data, timestamp: new Date().toISOString() };
-      }
+    // A single-file batch keeps the familiar "jump straight to the verdict" flow.
+    // Multi-file batches land in the queue list instead - auto-navigating on each
+    // concurrently-completing file would fight the user for the screen, so those
+    // results wait for a click instead (see fileQueueEl's click handler above).
+    if (toSend.length === 1 && toSend[0].entry) {
+      currentDetailEntry = toSend[0].entry;
       previousViewBeforeDetail = 'home';
       setView('detail');
-      clearFile();
-      loadHomeExtras();
-    } catch (err) {
-      currentDetailEntry = { resolution: null, error: 'Network error: unable to reach the server', fileName: selectedFile.name, sizeBytes: selectedFile.size, timestamp: new Date().toISOString() };
-      previousViewBeforeDetail = 'home';
-      setView('detail');
-    } finally {
-      clearInterval(phraseTimer);
-      scanVisual.classList.remove('active');
-      sendBtn.disabled = !selectedFile;
+      removeFromQueue(toSend[0].id);
+    } else {
+      renderFileQueue();
     }
   });
 
@@ -958,7 +1302,8 @@
 
   async function refreshHealth() {
     try {
-      const res = await fetch('/api/health');
+      const qs = selectedProtectorId ? '?protectorId=' + encodeURIComponent(selectedProtectorId) : '';
+      const res = await fetch('/api/health' + qs);
       const data = await res.json();
       const online = !!(data.protector && data.protector.reachable);
       healthBadge.className = 'health-pill ' + (online ? 'online' : 'offline');
@@ -977,19 +1322,182 @@
     healthCheckedAgoEl.textContent = secs < 1 ? 'just now' : `${secs}s ago`;
   }
 
-  refreshHealth();
-  setInterval(refreshHealth, 20000);
   setInterval(tickHealthAgo, 1000);
+
+  // =====================================================================
+  // Protector picker
+  // =====================================================================
+  const protectorSelect = document.getElementById('protectorSelect');
+
+  let protectorsList = [];
+
+  async function loadProtectors() {
+    try {
+      const res = await fetch('/api/protectors');
+      const data = await res.json();
+      protectorsList = data.protectors;
+      const stillValid = selectedProtectorId && data.protectors.some((p) => p.id === selectedProtectorId && !p.disabled);
+      if (!stillValid) selectedProtectorId = data.defaultProtectorId;
+
+      protectorSelect.innerHTML = data.protectors.map((p) => {
+        const label = p.disabled ? `${p.name} — ${p.unavailableReason}` : p.name;
+        const disabledAttr = p.disabled ? ' disabled' : '';
+        return `<option value="${escapeHtml(p.id)}"${disabledAttr}>${escapeHtml(label)}</option>`;
+      }).join('');
+      protectorSelect.value = selectedProtectorId;
+    } catch (err) {
+      protectorSelect.innerHTML = '<option value="">Unable to load Protector list</option>';
+    }
+    refreshHealth();
+  }
+
+  protectorSelect.addEventListener('change', () => {
+    selectedProtectorId = protectorSelect.value;
+    localStorage.setItem('selectedProtectorId', selectedProtectorId);
+    refreshHealth();
+  });
+
+  loadProtectors();
+  setInterval(loadProtectors, 20000);
 
   // =====================================================================
   // History + Home extras (stats / recent scans)
   // =====================================================================
-  let historyCache = { entries: [], stats: {} };
-  let historyFilterMode = 'all';
+  let historyCache = { entries: [], stats: {}, pagination: {} };
+  let historyFilterMode = 'all'; // 'all' | 'block' | 'warn' | 'pass' - matches the persisted verdict column
+  let historySort = { key: 'timestamp', dir: 'desc' };
+  let historyPage = 1;
+  const HISTORY_PAGE_SIZE = 50;
+  let historySearchDebounce = null;
+  let lastRecentEntries = [];
 
   async function fetchHistory(limit) {
     const res = await fetch('/api/history?limit=' + limit);
     return res.json();
+  }
+
+  async function fetchHistoryQuery(params) {
+    const qs = Object.entries(params)
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&');
+    const res = await fetch('/api/history' + (qs ? '?' + qs : ''));
+    return res.json();
+  }
+
+  // --- Column model: shared between Recent Scans and History ---
+  const COLUMN_DEFS = [
+    { key: 'time', label: 'Time', width: 130 },
+    { key: 'file', label: 'File', flex: true },
+    { key: 'size', label: 'Size', width: 70 },
+    { key: 'resolution', label: 'Resolution', width: 90 },
+    { key: 'protector', label: 'Protector', width: 120 },
+    { key: 'source', label: 'Source', width: 130 },
+    { key: 'channel', label: 'Channel', width: 90 },
+    { key: 'policy', label: 'Policy', width: 190 },
+    { key: 'matches', label: 'Matches', width: 80 },
+    { key: 'elapsed', label: 'Elapsed', width: 90 },
+  ];
+  const ALWAYS_ON_COLUMNS = ['time', 'file', 'resolution'];
+  const ALL_COLUMN_KEYS = COLUMN_DEFS.map((c) => c.key);
+
+  function loadVisibleColumns() {
+    try {
+      const stored = JSON.parse(localStorage.getItem('visibleColumns'));
+      if (Array.isArray(stored)) return new Set(stored);
+    } catch (err) { /* fall through to default: everything on */ }
+    return new Set(ALL_COLUMN_KEYS);
+  }
+  let visibleColumns = loadVisibleColumns();
+
+  function saveVisibleColumns() {
+    localStorage.setItem('visibleColumns', JSON.stringify(Array.from(visibleColumns)));
+  }
+  function activeColumnDefs() {
+    return COLUMN_DEFS.filter((c) => ALWAYS_ON_COLUMNS.includes(c.key) || visibleColumns.has(c.key));
+  }
+  function gridTemplateFor(defs) {
+    return defs.map((c) => (c.flex ? '1fr' : c.width + 'px')).join(' ');
+  }
+
+  function columnCellHtml(key, entry, opts) {
+    switch (key) {
+      case 'time': {
+        const d = entry.timestamp ? new Date(entry.timestamp) : null;
+        const text = d ? (opts.showMs ? d.toLocaleTimeString() + '.' + String(d.getMilliseconds()).padStart(3, '0') : d.toLocaleTimeString()) : '–';
+        return `<span class="cell-time">${text}</span>`;
+      }
+      case 'file': {
+        const fileName = entry.fileName || '-';
+        return `<span class="cell-file" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span>`;
+      }
+      case 'size':
+        return `<span class="cell-size">${formatBytes(getEntrySize(entry))}</span>`;
+      case 'resolution': {
+        const level = classifyEntry(entry);
+        const badgeClass = level === 'block' ? 'block' : level === 'warn' ? 'warn' : level === 'error' ? 'warn' : 'allow';
+        const badgeText = level === 'block' ? 'Block' : level === 'warn' ? 'Flagged' : level === 'error' ? 'Error' : 'Allow';
+        return `<span class="badge ${badgeClass} cell-resolution">${badgeText}</span>`;
+      }
+      case 'protector': {
+        const protectorName = entry.protectorName || '–';
+        return `<span class="cell-protector" title="${escapeHtml(protectorName)}">${escapeHtml(protectorName)}</span>`;
+      }
+      case 'source': {
+        const source = formatSource(entry);
+        return `<span class="cell-source" title="${escapeHtml(source)}">${escapeHtml(source)}</span>`;
+      }
+      case 'channel': {
+        const channel = entry.dataChannel || '–';
+        return `<span class="cell-channel" title="${escapeHtml(channel)}">${escapeHtml(channel)}</span>`;
+      }
+      case 'policy': {
+        const policySummary = (entry.violations && entry.violations[0]) ? (entry.violations[0].policyName || entry.violations[0].policyId) : (entry.error ? entry.error : '—');
+        return `<span class="cell-policy" title="${escapeHtml(policySummary)}">${escapeHtml(policySummary)}</span>`;
+      }
+      case 'matches': {
+        const matches = entry.maxNumberOfMatches !== undefined && entry.maxNumberOfMatches !== null ? entry.maxNumberOfMatches : '—';
+        return `<span class="cell-matches">${matches}</span>`;
+      }
+      case 'elapsed':
+        return `<span class="cell-elapsed">${entry.elapsedMs !== undefined ? entry.elapsedMs + ' ms' : '–'}</span>`;
+      default:
+        return '';
+    }
+  }
+
+  // Maps a column key to the server-side sort key it corresponds to (see
+  // historyStore.js's SORT_COLUMNS whitelist) - only columns backed by a real,
+  // indexed scan_history column are sortable. Never pass raw column keys to the
+  // API directly; this mapping is the single source of truth for what's valid.
+  const SORT_KEY_FOR_COLUMN = {
+    time: 'timestamp', file: 'fileName', size: 'fileSizeBytes', protector: 'protectorName',
+    channel: 'dataChannel', matches: 'maxNumberOfMatches', elapsed: 'elapsedMs',
+  };
+
+  function buildHeadRowHtml(defs, opts = {}) {
+    return defs.map((c) => {
+      const sortKey = SORT_KEY_FOR_COLUMN[c.key];
+      if (opts.sortable && sortKey) {
+        const active = historySort.key === sortKey;
+        const caret = active ? `<span class="caret">${historySort.dir === 'asc' ? '▲' : '▼'}</span>` : '';
+        return `<button type="button" class="head-sort-btn${active ? ' active' : ''}" data-sort-key="${sortKey}">${escapeHtml(c.label)}${caret}</button>`;
+      }
+      return `<span>${escapeHtml(c.label)}</span>`;
+    }).join('');
+  }
+  function buildDataRowHtml(entry, defs, opts, rowClass) {
+    const cells = defs.map((c) => columnCellHtml(c.key, entry, opts)).join('');
+    return `<div class="${rowClass}" data-entry-id="${escapeHtml(entry.globalMessageId || '')}" style="grid-template-columns:${gridTemplateFor(defs)}">${cells}</div>`;
+  }
+
+  function renderColumnHeaders() {
+    const defs = activeColumnDefs();
+    const gridTemplate = gridTemplateFor(defs);
+    const recentHead = document.getElementById('recentHeadRow');
+    const historyHead = document.getElementById('historyHeadRow');
+    if (recentHead) { recentHead.style.gridTemplateColumns = gridTemplate; recentHead.innerHTML = buildHeadRowHtml(defs); }
+    if (historyHead) { historyHead.style.gridTemplateColumns = gridTemplate; historyHead.innerHTML = buildHeadRowHtml(defs, { sortable: true }); }
   }
 
   async function loadHomeExtras() {
@@ -1004,39 +1512,32 @@
   }
 
   function renderRecentScans(entries) {
+    lastRecentEntries = entries;
     const el = document.getElementById('recentScansList');
     if (!entries.length) {
       el.innerHTML = '<div class="empty-note">No scans yet — send a file above to get started.</div>';
       return;
     }
-    el.innerHTML = entries.map((entry) => recentRowHtml(entry)).join('');
+    const defs = activeColumnDefs();
+    el.innerHTML = entries.map((entry) => buildDataRowHtml(entry, defs, { showMs: false }, 'recent-row')).join('');
     el.querySelectorAll('[data-entry-id]').forEach((row) => {
       row.addEventListener('click', () => openDetailById(row.dataset.entryId, 'home'));
     });
-  }
-
-  function recentRowHtml(entry) {
-    const level = classifyEntry(entry);
-    const badgeClass = level === 'block' ? 'block' : level === 'warn' ? 'warn' : level === 'error' ? 'warn' : 'allow';
-    const badgeText = level === 'block' ? 'Block' : level === 'warn' ? 'Flagged' : level === 'error' ? 'Error' : 'Allow';
-    const policySummary = (entry.violations && entry.violations[0]) ? (entry.violations[0].policyName || entry.violations[0].policyId) : (entry.error ? entry.error : '—');
-    const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '–';
-    return `<div class="recent-row" data-entry-id="${escapeHtml(entry.globalMessageId || '')}">
-      <span class="t">${time}</span>
-      <span class="f">${escapeHtml(entry.fileName || '-')}</span>
-      <span class="s">${formatBytes(getEntrySize(entry))}</span>
-      <span class="src">${escapeHtml(formatSource(entry))}</span>
-      <span class="ch">${escapeHtml(entry.dataChannel || '–')}</span>
-      <span class="p">${escapeHtml(policySummary)}</span>
-      <span class="badge ${badgeClass}">${badgeText}</span>
-    </div>`;
   }
 
   async function loadHistory() {
     const el = document.getElementById('historyRows');
     el.innerHTML = '<div class="empty-note">Loading…</div>';
     try {
-      historyCache = await fetchHistory(200);
+      const search = document.getElementById('historySearch').value.trim();
+      historyCache = await fetchHistoryQuery({
+        fileName: search,
+        verdict: historyFilterMode !== 'all' ? historyFilterMode : undefined,
+        sortBy: historySort.key,
+        sortDir: historySort.dir,
+        page: historyPage,
+        pageSize: HISTORY_PAGE_SIZE,
+      });
       renderHistoryRows();
     } catch (err) {
       el.innerHTML = '<div class="empty-note">Failed to load history.</div>';
@@ -1045,56 +1546,230 @@
 
   function renderHistoryRows() {
     const el = document.getElementById('historyRows');
-    const search = document.getElementById('historySearch').value.trim().toLowerCase();
-    let entries = historyCache.entries.slice();
-
-    if (historyFilterMode === 'block') {
-      entries = entries.filter((e) => classifyEntry(e) === 'block');
-    } else if (historyFilterMode === 'allow') {
-      entries = entries.filter((e) => classifyEntry(e) === 'pass');
-    }
-    if (search) {
-      entries = entries.filter((e) => (e.fileName || '').toLowerCase().includes(search));
-    }
+    const entries = historyCache.entries || [];
 
     if (!entries.length) {
       el.innerHTML = '<div class="empty-note" style="padding:20px;">No scans match this filter.</div>';
-      return;
+    } else {
+      const defs = activeColumnDefs();
+      el.innerHTML = entries.map((entry) => buildDataRowHtml(entry, defs, { showMs: true }, 'table-body-row')).join('');
+      el.querySelectorAll('[data-entry-id]').forEach((row) => {
+        row.addEventListener('click', () => openDetailById(row.dataset.entryId, 'history'));
+      });
     }
+    renderHistoryPager();
+  }
 
-    el.innerHTML = entries.map((entry) => historyRowHtml(entry)).join('');
-    el.querySelectorAll('[data-entry-id]').forEach((row) => {
-      row.addEventListener('click', () => openDetailById(row.dataset.entryId, 'history'));
+  function renderHistoryPager() {
+    const pager = document.getElementById('historyPager');
+    const p = historyCache.pagination;
+    if (!p || !p.totalCount) { pager.innerHTML = ''; return; }
+    pager.innerHTML = `
+      <button type="button" id="historyPrevBtn"${p.page <= 1 ? ' disabled' : ''}>&larr; Prev</button>
+      <span class="page-info">Page ${p.page} of ${p.totalPages} · ${p.totalCount} total</span>
+      <button type="button" id="historyNextBtn"${p.page >= p.totalPages ? ' disabled' : ''}>Next &rarr;</button>
+    `;
+    const prevBtn = document.getElementById('historyPrevBtn');
+    const nextBtn = document.getElementById('historyNextBtn');
+    if (prevBtn) prevBtn.addEventListener('click', () => { historyPage = Math.max(1, historyPage - 1); loadHistory(); });
+    if (nextBtn) nextBtn.addEventListener('click', () => { historyPage = Math.min(p.totalPages, historyPage + 1); loadHistory(); });
+  }
+
+  // =====================================================================
+  // Analytics - hand-rolled inline SVG charts (no charting library: no CDN is
+  // available to this app, no build step exists, and the data volumes here -
+  // a handful of days/categories/top-10 lists - don't need canvas/WebGL. These
+  // return plain SVG markup strings, same pattern as columnCellHtml/buildDataRowHtml.
+  // =====================================================================
+  function truncateLabel(text, max) {
+    const s = String(text || '—');
+    return s.length > max ? s.slice(0, max - 1) + '…' : s;
+  }
+
+  function renderTrendChartSvg(trend) {
+    if (!trend.length) return '<div class="empty-note">No data yet.</div>';
+    const width = 640, height = 200, padL = 34, padR = 12, padT = 14, padB = 26;
+    const maxTotal = Math.max(...trend.map((t) => t.total), 1);
+    const innerW = width - padL - padR;
+    const innerH = height - padT - padB;
+    const stepX = trend.length > 1 ? innerW / (trend.length - 1) : 0;
+    const xFor = (i) => padL + i * stepX;
+    const yFor = (v) => padT + innerH * (1 - v / maxTotal);
+
+    const totalPoints = trend.map((t, i) => `${xFor(i)},${yFor(t.total)}`).join(' ');
+    const blockedPoints = trend.map((t, i) => `${xFor(i)},${yFor(t.blocked)}`).join(' ');
+    const dots = trend.map((t, i) => `<circle cx="${xFor(i)}" cy="${yFor(t.total)}" r="3" class="chart-dot"><title>${escapeHtml(t.day)}: ${t.total} scans, ${t.blocked} blocked</title></circle>`).join('');
+    const blockedDots = trend.map((t, i) => `<circle cx="${xFor(i)}" cy="${yFor(t.blocked)}" r="3" class="chart-dot-blocked"><title>${escapeHtml(t.day)}: ${t.blocked} blocked</title></circle>`).join('');
+    const maxLabels = 10;
+    const labelStep = Math.max(1, Math.ceil(trend.length / maxLabels));
+    const labels = trend
+      .map((t, i) => (i % labelStep === 0 || i === trend.length - 1 ? `<text x="${xFor(i)}" y="${height - 6}" text-anchor="middle" class="chart-axis-label">${escapeHtml(t.day.slice(5))}</text>` : ''))
+      .join('');
+
+    return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg">
+      <polyline points="${totalPoints}" class="chart-line-total" fill="none"/>
+      <polyline points="${blockedPoints}" class="chart-line-blocked" fill="none"/>
+      ${dots}${blockedDots}${labels}
+    </svg>`;
+  }
+
+  function renderBarChartSvg(items, valueKey) {
+    const data = items.slice(0, 8);
+    if (!data.length) return '<div class="empty-note">No data yet.</div>';
+    const width = 400, barHeight = 22, gap = 12, leftPad = 130, rightPad = 44;
+    const maxVal = Math.max(...data.map((d) => d[valueKey]), 1);
+    const height = data.length * (barHeight + gap);
+    const bars = data
+      .map((d, i) => {
+        const y = i * (barHeight + gap);
+        const barWidth = Math.max(2, ((width - leftPad - rightPad) * d[valueKey]) / maxVal);
+        return `
+          <text x="${leftPad - 8}" y="${y + barHeight / 2 + 4}" text-anchor="end" class="chart-label">${escapeHtml(truncateLabel(d.name, 18))}</text>
+          <rect x="${leftPad}" y="${y}" width="${barWidth}" height="${barHeight}" rx="4" class="chart-bar"><title>${escapeHtml(d.name || '')}: ${d[valueKey]}</title></rect>
+          <text x="${leftPad + barWidth + 8}" y="${y + barHeight / 2 + 4}" class="chart-value">${d[valueKey]}</text>
+        `;
+      })
+      .join('');
+    return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg">${bars}</svg>`;
+  }
+
+  async function loadAnalytics() {
+    const targets = ['chartTrend', 'chartByProtector', 'chartByChannel', 'chartTopPolicies', 'chartTopRules'];
+    targets.forEach((id) => { document.getElementById(id).innerHTML = '<div class="empty-note">Loading…</div>'; });
+    try {
+      const res = await fetch('/api/history/analytics');
+      const data = await res.json();
+      document.getElementById('chartTrend').innerHTML = renderTrendChartSvg(data.trend || []);
+      document.getElementById('chartByProtector').innerHTML = renderBarChartSvg(data.byProtector || [], 'count');
+      document.getElementById('chartByChannel').innerHTML = renderBarChartSvg(data.byChannel || [], 'count');
+      document.getElementById('chartTopPolicies').innerHTML = renderBarChartSvg(data.topPolicies || [], 'hits');
+      document.getElementById('chartTopRules').innerHTML = renderBarChartSvg(data.topRules || [], 'hits');
+    } catch (err) {
+      targets.forEach((id) => { document.getElementById(id).innerHTML = '<div class="empty-note">Failed to load analytics.</div>'; });
+    }
+  }
+
+  // --- Column picker popover (shared by both gear buttons) ---
+  const columnPicker = document.getElementById('columnPicker');
+  const columnsBtnHome = document.getElementById('columnsBtnHome');
+  const columnsBtnHistory = document.getElementById('columnsBtnHistory');
+
+  function populateColumnPickerCheckboxes() {
+    columnPicker.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.checked = visibleColumns.has(cb.dataset.col);
     });
   }
 
-  function historyRowHtml(entry) {
-    const level = classifyEntry(entry);
-    const badgeClass = level === 'block' ? 'block' : level === 'warn' ? 'warn' : level === 'error' ? 'warn' : 'allow';
-    const badgeText = level === 'block' ? 'Block' : level === 'warn' ? 'Flagged' : level === 'error' ? 'Timeout' : 'Allow';
-    const policySummary = (entry.violations && entry.violations[0]) ? (entry.violations[0].policyName || entry.violations[0].policyId) : (entry.error ? entry.error : '—');
-    const matches = entry.maxNumberOfMatches !== undefined && entry.maxNumberOfMatches !== null ? entry.maxNumberOfMatches : '—';
-    const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() + '.' + String(new Date(entry.timestamp).getMilliseconds()).padStart(3, '0') : '–';
-    return `<div class="table-body-row table-cols" data-entry-id="${escapeHtml(entry.globalMessageId || '')}">
-      <span class="c-time">${time}</span>
-      <span class="c-file">${escapeHtml(entry.fileName || '-')}</span>
-      <span class="c-size">${formatBytes(getEntrySize(entry))}</span>
-      <span class="badge ${badgeClass}" style="justify-self:start;">${badgeText}</span>
-      <span class="c-source">${escapeHtml(formatSource(entry))}</span>
-      <span class="c-channel">${escapeHtml(entry.dataChannel || '–')}</span>
-      <span class="c-policy">${escapeHtml(policySummary)}</span>
-      <span class="c-matches">${matches}</span>
-      <span class="c-elapsed">${entry.elapsedMs !== undefined ? entry.elapsedMs + ' ms' : '–'}</span>
-    </div>`;
+  function openColumnPicker(anchorEl) {
+    populateColumnPickerCheckboxes();
+    columnPicker.classList.add('visible'); // show first so its real height is measurable below
+    const margin = 8;
+    const rect = anchorEl.getBoundingClientRect();
+    const pickerRect = columnPicker.getBoundingClientRect();
+
+    // CSS caps the picker's own height at 100vh - 24px, so maxTop here is always >= minTop -
+    // the final clamp below guarantees the popover stays fully within the viewport no matter
+    // where the anchor is (even if the anchor itself isn't currently visible).
+    const minTop = margin;
+    const maxTop = Math.max(minTop, window.innerHeight - pickerRect.height - margin);
+
+    let top = rect.bottom + margin;
+    if (top > maxTop) {
+      const topIfAbove = rect.top - margin - pickerRect.height;
+      top = topIfAbove >= minTop ? topIfAbove : maxTop;
+    }
+    top = Math.min(Math.max(top, minTop), maxTop);
+
+    const maxLeft = Math.max(margin, window.innerWidth - pickerRect.width - margin);
+    columnPicker.style.top = top + 'px';
+    columnPicker.style.left = Math.min(Math.max(rect.left, margin), maxLeft) + 'px';
+  }
+  function closeColumnPicker() {
+    columnPicker.classList.remove('visible');
   }
 
-  document.getElementById('historySearch').addEventListener('input', renderHistoryRows);
+  [columnsBtnHome, columnsBtnHistory].forEach((btn) => {
+    if (!btn) return;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (columnPicker.classList.contains('visible')) { closeColumnPicker(); return; }
+      openColumnPicker(btn);
+    });
+  });
+  columnPicker.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => closeColumnPicker());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeColumnPicker(); });
+
+  columnPicker.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const key = cb.dataset.col;
+      if (cb.checked) visibleColumns.add(key); else visibleColumns.delete(key);
+      saveVisibleColumns();
+      renderColumnHeaders();
+      renderRecentScans(lastRecentEntries);
+      renderHistoryRows();
+    });
+  });
+
+  renderColumnHeaders();
+
+  document.getElementById('historySearch').addEventListener('input', () => {
+    clearTimeout(historySearchDebounce);
+    historySearchDebounce = setTimeout(() => { historyPage = 1; loadHistory(); }, 300);
+  });
   document.querySelectorAll('#historyFilter button').forEach((btn) => {
     btn.addEventListener('click', () => {
       historyFilterMode = btn.dataset.filter;
       document.querySelectorAll('#historyFilter button').forEach((b) => b.classList.toggle('active', b === btn));
-      renderHistoryRows();
+      historyPage = 1;
+      loadHistory();
     });
+  });
+  document.getElementById('historyHeadRow').addEventListener('click', (e) => {
+    const btn = e.target.closest('.head-sort-btn');
+    if (!btn) return;
+    const key = btn.dataset.sortKey;
+    historySort.dir = historySort.key === key ? (historySort.dir === 'asc' ? 'desc' : 'asc') : 'asc';
+    historySort.key = key;
+    historyPage = 1;
+    renderColumnHeaders();
+    loadHistory();
+  });
+
+  function currentHistoryFilterParams() {
+    const search = document.getElementById('historySearch').value.trim();
+    return {
+      fileName: search || undefined,
+      verdict: historyFilterMode !== 'all' ? historyFilterMode : undefined,
+      sortBy: historySort.key,
+      sortDir: historySort.dir,
+    };
+  }
+
+  document.getElementById('historyExportBtn').addEventListener('click', () => {
+    const qs = Object.entries(currentHistoryFilterParams())
+      .filter(([, v]) => v !== undefined && v !== null && v !== '')
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&');
+    window.location = '/api/history/export.csv' + (qs ? '?' + qs : '');
+  });
+
+  document.getElementById('historyPrintBtn').addEventListener('click', async () => {
+    // Print the FULL filtered set, not just the current on-screen page - swap the
+    // table's content temporarily (historyCache/pagination state is untouched, so
+    // afterprint just re-renders from it to restore the normal paginated view).
+    const data = await fetchHistoryQuery({ ...currentHistoryFilterParams(), page: 1, pageSize: 5000 });
+    const defs = activeColumnDefs();
+    document.getElementById('historyRows').innerHTML = (data.entries || [])
+      .map((entry) => buildDataRowHtml(entry, defs, { showMs: true }, 'table-body-row'))
+      .join('');
+    window.print();
+  });
+  window.addEventListener('afterprint', () => { if (currentView === 'history') renderHistoryRows(); });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#printVerdictBtn')) return;
+    window.print();
   });
 
   async function openDetailById(id, fromView) {
@@ -1137,11 +1812,13 @@
             <div class="verdict-sub">${escapeHtml(entry.error || 'Unknown error')}</div>
           </div>
         </div>
+        ${entry.__retryFile ? `<div style="margin:14px 0;"><button type="button" class="btn-secondary" id="retryScanBtn">Retry (same file, from memory)</button></div>` : ''}
         <div class="stat-cards">
           <div class="stat-card"><div class="lbl">File</div><div class="val">${escapeHtml(entry.fileName || '-')}</div></div>
           <div class="stat-card"><div class="lbl">Size</div><div class="val">${formatBytes(getEntrySize(entry))}</div></div>
           <div class="stat-card"><div class="lbl">Elapsed</div><div class="val">${entry.elapsedMs !== undefined ? entry.elapsedMs + ' ms' : '–'}</div></div>
           <div class="stat-card"><div class="lbl">Error code</div><div class="val">${escapeHtml(entry.errorCode || '-')}</div></div>
+          <div class="stat-card"><div class="lbl">Protector</div><div class="val">${escapeHtml(entry.protectorName || '–')}${entry.failedOver ? ' <span title="The originally selected Protector didn\'t answer; this scan automatically failed over to the next configured one." style="font-size:11px; color:var(--ink-dim); font-weight:600;">(failover)</span>' : ''}</div></div>
         </div>`;
       return;
     }
@@ -1164,6 +1841,7 @@
       </div>
     </div>
 
+    ${entry.__retryFile ? `<div style="margin:14px 0;"><button type="button" class="btn-secondary" id="retryScanBtn">Retry (same file, from memory)</button></div>` : ''}
     <div class="stat-cards">
       <div class="stat-card"><div class="lbl">File</div><div class="val">${escapeHtml(entry.fileName || '-')}</div></div>
       <div class="stat-card"><div class="lbl">Size</div><div class="val">${formatBytes(getEntrySize(entry))}</div></div>
@@ -1171,6 +1849,7 @@
       <div class="stat-card"><div class="lbl">Max matches</div><div class="val">${entry.maxNumberOfMatches !== undefined ? entry.maxNumberOfMatches : '–'}</div></div>
       <div class="stat-card"><div class="lbl">Source</div><div class="val mono" style="font-size:13px;">${escapeHtml(formatSource(entry))}</div></div>
       <div class="stat-card"><div class="lbl">Channel</div><div class="val">${escapeHtml(entry.dataChannel || '–')}</div></div>
+      <div class="stat-card"><div class="lbl">Protector</div><div class="val">${escapeHtml(entry.protectorName || '–')}${entry.failedOver ? ' <span title="The originally selected Protector didn\'t answer; this scan automatically failed over to the next configured one." style="font-size:11px; color:var(--ink-dim); font-weight:600;">(failover)</span>' : ''}</div></div>
     </div>`;
 
     if (violations.length) {
@@ -1195,17 +1874,25 @@
       <div class="response-panel">
         <div class="response-panel-head">
           <div class="settings-group-title">Protector response</div>
-          <div style="margin-left:auto;">${copyButtonHtml(JSON.stringify(entry, null, 2))}</div>
+          <div style="margin-left:auto; display:flex; gap:8px;">
+            ${copyButtonHtml(entryJson(entry))}
+            ${downloadButtonHtml(entryJson(entry), `scan-${entry.globalMessageId || 'result'}.json`)}
+            <button type="button" class="copy-btn no-print" id="printVerdictBtn">Print</button>
+          </div>
         </div>
-        <pre>${escapeHtml(JSON.stringify(entry, null, 2))}</pre>
+        <pre>${escapeHtml(entryJson(entry))}</pre>
       </div></div>`;
     } else {
       html += `<div class="response-panel">
         <div class="response-panel-head">
           <div class="settings-group-title">Protector response</div>
-          <div style="margin-left:auto;">${copyButtonHtml(JSON.stringify(entry, null, 2))}</div>
+          <div style="margin-left:auto; display:flex; gap:8px;">
+            ${copyButtonHtml(entryJson(entry))}
+            ${downloadButtonHtml(entryJson(entry), `scan-${entry.globalMessageId || 'result'}.json`)}
+            <button type="button" class="copy-btn no-print" id="printVerdictBtn">Print</button>
+          </div>
         </div>
-        <pre>${escapeHtml(JSON.stringify(entry, null, 2))}</pre>
+        <pre>${escapeHtml(entryJson(entry))}</pre>
       </div>`;
     }
 
@@ -1231,10 +1918,18 @@
     destinationHttpUrl: { input: document.getElementById('input-destinationHttpUrl'), toggle: document.getElementById('enable-destinationHttpUrl'), row: document.getElementById('col-destinationHttpUrl') },
     destinationHttpHostname: { input: document.getElementById('input-destinationHttpHostname'), toggle: document.getElementById('enable-destinationHttpHostname'), row: document.getElementById('col-destinationHttpHostname') },
     dataChannel: { input: document.getElementById('input-dataChannel'), toggle: document.getElementById('enable-dataChannel'), row: document.getElementById('col-dataChannel') },
+    webhookUrl: { input: document.getElementById('input-webhookUrl'), toggle: document.getElementById('enable-webhookUrl'), row: document.getElementById('col-webhookUrl') },
+    webhookFormat: { input: document.getElementById('input-webhookFormat'), toggle: document.getElementById('enable-webhookFormat'), row: document.getElementById('col-webhookFormat') },
   };
 
   function populateDataChannelOptions(options) {
     const select = FIELDS.dataChannel.input;
+    if (!options || !options.length || select.options.length) return;
+    select.innerHTML = options.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  }
+
+  function populateWebhookFormatOptions(options) {
+    const select = FIELDS.webhookFormat.input;
     if (!options || !options.length || select.options.length) return;
     select.innerHTML = options.map((v) => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
   }
@@ -1272,6 +1967,7 @@
       const res = await fetch('/api/settings');
       const data = await res.json();
       populateDataChannelOptions(data.options && data.options.dataChannel);
+      populateWebhookFormatOptions(data.options && data.options.webhookFormat);
       populateSettingsForm(data.fields);
     } catch (err) {
       settingsStatus.textContent = 'Failed to load current settings';
@@ -1323,6 +2019,7 @@
     maxSizeHint.textContent = data.effective.maxFileSizeMb + ' MB';
     effectiveMaxFileSizeMb = data.effective.maxFileSizeMb;
     populateDataChannelOptions(data.options && data.options.dataChannel);
+    populateWebhookFormatOptions(data.options && data.options.webhookFormat);
   }).catch(() => {});
 
   loadHomeExtras();
