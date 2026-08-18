@@ -127,13 +127,14 @@ as usual to `logs/requests.log.jsonl` per `LOG_FILE_PATH`.
 ## Project structure
 
 ```
-server.js                # Express app + endpoints GET /api/health, POST /api/scan, GET/POST /api/settings
+server.js                # Express app + endpoints GET /api/health, POST /api/scan, GET /api/history[/:id], GET/POST /api/settings
 src/config.js            # Loads configuration from .env (Protector connection)
 src/settingsStore.js     # Safe runtime settings editable via the UI, saved in data/settings.json
 src/protectorClient.js   # Builds and sends the Inspection API request to the Protector
 src/logger.js            # JSON-lines log for every request
-public/index.html        # UI - single page, drag & drop + Settings screen, no build step
-public/docs.html          # Internal API docs (POST /api/scan, GET/POST /api/settings)
+src/historyStore.js      # Reads requests.log.jsonl back for the History/Verdict Detail screens
+public/index.html        # UI - Scan / History / Verdict Detail / Settings screens, no build step
+public/docs.html          # Internal API docs (all endpoints, with interactive "Try it out" panels)
 scripts/install-service.js    # Registers as a Windows Service (services.msc) - requires Administrator
 scripts/uninstall-service.js  # Removes the Windows Service
 postman/                 # Postman collection + testing instructions (both against the app and directly against the Protector)

@@ -4,6 +4,13 @@ const config = require('./config');
 
 const SETTINGS_FILE = path.resolve(__dirname, '..', 'data', 'settings.json');
 
+// Confirmed via the Protector's own validation error message (see DEVELOPER.md) -
+// FTP is notably NOT in this list despite appearing in some Forcepoint docs.
+const DATA_CHANNEL_OPTIONS = [
+  'TESTING_CHANNEL', 'HTTP', 'HTTPS', 'CASB_REAL_TIME', 'ZTNA',
+  'CASB_DISCOVERY', 'NETWORK_DISCOVERY', 'CASB_API', 'EMAIL',
+];
+
 // Fallback used whenever a field's override is disabled (or never set).
 const DEFAULTS = {
   maxFileSizeMb: config.maxFileSizeMb,
@@ -14,6 +21,10 @@ const DEFAULTS = {
   hostName: '', // disabled = auto-detect from os.hostname()
   destinationHttpUrl: config.destination.httpRequestUrl,
   destinationHttpHostname: config.destination.httpRequestUrlHostname,
+  // context.data_channel sent on every scan - affects how the Protector's Traffic
+  // Log classifies the request (e.g. HTTP/HTTPS both land under "Network" in our
+  // environment; other values land under different channels a policy may not cover).
+  dataChannel: 'HTTP',
 };
 
 const FIELD_KEYS = Object.keys(DEFAULTS);
@@ -42,6 +53,7 @@ const VALIDATORS = {
   destinationHttpUrl: (v) =>
     typeof v === 'string' && v.length <= 2048 && /^https?:\/\/.+/i.test(v.trim()) ? v.trim() : undefined,
   destinationHttpHostname: (v) => (typeof v === 'string' && v.trim() && v.length <= 253 ? v.trim() : undefined),
+  dataChannel: (v) => (DATA_CHANNEL_OPTIONS.includes(v) ? v : undefined),
 };
 
 function readOverrides() {
@@ -115,4 +127,4 @@ function updateSettings(partial) {
   return next;
 }
 
-module.exports = { getSettings, getFieldStates, updateSettings };
+module.exports = { getSettings, getFieldStates, updateSettings, DATA_CHANNEL_OPTIONS };

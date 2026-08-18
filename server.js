@@ -1,10 +1,12 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const crypto = require('crypto');
 const config = require('./src/config');
 const { inspectFile, inspectRaw, checkProtectorReachability } = require('./src/protectorClient');
 const { logScanEvent } = require('./src/logger');
-const { getSettings, getFieldStates, updateSettings } = require('./src/settingsStore');
+const { getSettings, getFieldStates, updateSettings, DATA_CHANNEL_OPTIONS } = require('./src/settingsStore');
+const { getHistory, getHistoryEntry } = require('./src/historyStore');
 
 const app = express();
 const memoryStorage = multer.memoryStorage();
@@ -39,8 +41,21 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+app.get('/api/history', (req, res) => {
+  const limit = Math.max(1, Math.min(500, parseInt(req.query.limit, 10) || 50));
+  res.json(getHistory(limit));
+});
+
+app.get('/api/history/:id', (req, res) => {
+  const entry = getHistoryEntry(req.params.id);
+  if (!entry) {
+    return res.status(404).json({ error: 'No scan found with that id' });
+  }
+  res.json(entry);
+});
+
 app.get('/api/settings', (req, res) => {
-  res.json({ fields: getFieldStates(), effective: getSettings() });
+  res.json({ fields: getFieldStates(), effective: getSettings(), options: { dataChannel: DATA_CHANNEL_OPTIONS } });
 });
 
 app.post('/api/settings', (req, res) => {
@@ -75,18 +90,25 @@ app.post('/api/scan', (req, res) => {
 
     const { size, buffer } = req.file;
     const originalname = fixFilenameEncoding(req.file.originalname);
+    // Generated up front (rather than inside inspectFile) so the same id can be logged
+    // on both success and failure - lets the History/Verdict Detail screens look up any
+    // past attempt, including ones that timed out or never reached the Protector.
+    const requestId = crypto.randomUUID();
 
     try {
-      const result = await inspectFile(buffer, originalname, req.ip);
-      const { httpStatus, body, elapsedMs, globalMessageId } = result;
+      const result = await inspectFile(buffer, originalname, req.ip, requestId);
+      const { httpStatus, body, elapsedMs, globalMessageId, source, dataChannel } = result;
 
       if (httpStatus < 200 || httpStatus >= 300) {
         logScanEvent({
+          globalMessageId,
           fileName: originalname,
-          sizeBytes: size,
+          fileSizeBytes: size,
           resolution: null,
           httpStatus,
           elapsedMs,
+          source,
+          dataChannel,
           error: `Protector returned HTTP ${httpStatus}`,
         });
         return res.status(502).json({
@@ -98,17 +120,7 @@ app.post('/api/scan', (req, res) => {
       const violations = Array.isArray(body.violations) ? body.violations : [];
       const actions = Array.isArray(body.actions) ? body.actions : [];
 
-      logScanEvent({
-        fileName: originalname,
-        sizeBytes: size,
-        resolution: body.resolution || null,
-        globalMessageId,
-        httpStatus,
-        elapsedMs,
-        violationCount: violations.length,
-      });
-
-      return res.json({
+      const responsePayload = {
         globalMessageId,
         resolution: body.resolution || 'UNKNOWN',
         violations: violations.map((v) => ({
@@ -126,12 +138,19 @@ app.post('/api/scan', (req, res) => {
         elapsedMs,
         fileName: originalname,
         fileSizeBytes: size,
-      });
+        source,
+        dataChannel,
+      };
+
+      logScanEvent({ ...responsePayload, httpStatus });
+
+      return res.json(responsePayload);
     } catch (error) {
       const elapsedMs = error.elapsedMs || 0;
       logScanEvent({
+        globalMessageId: requestId,
         fileName: originalname,
-        sizeBytes: size,
+        fileSizeBytes: size,
         resolution: null,
         elapsedMs,
         error: error.message,

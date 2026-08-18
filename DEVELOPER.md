@@ -34,11 +34,12 @@ Key files:
 
 | File | Role |
 |---|---|
-| `server.js` | Express routes: `GET /api/health`, `POST /api/scan`, `GET/POST /api/settings`, `GET /docs` |
+| `server.js` | Express routes: `GET /api/health`, `POST /api/scan`, `GET /api/history`, `GET /api/history/:id`, `GET/POST /api/settings`, `GET /docs` |
 | `src/config.js` | Protector connection config from `.env` (host/port/protocol/token/TLS) |
 | `src/settingsStore.js` | Runtime settings editable via the UI (saved in `data/settings.json`) |
 | `src/protectorClient.js` | **Builds the actual request to the Protector** and sends it — see section 3 |
 | `src/logger.js` | JSON-lines log for every scan |
+| `src/historyStore.js` | Reads `requests.log.jsonl` back for the History/Verdict Detail screens |
 
 ---
 
@@ -116,12 +117,26 @@ unprocessed.
 Response is the Protector's exact JSON body, unmodified (snake_case fields, `cpe_transaction_info`,
 etc.) — mirrored with the same HTTP status the Protector returned.
 
+### `GET /api/history` and `GET /api/history/:id`
+
+Read past scans back from `requests.log.jsonl` (see `src/historyStore.js`). `GET /api/history?limit=N`
+returns `{ entries, stats }` — `entries` is the N most recent scans (default 50, max 500), each in
+the same shape as a `POST /api/scan` response plus `timestamp` and `httpStatus`; `stats` is computed
+over *all* logged entries regardless of `limit` (`scansToday`, `blockedToday`,
+`medianElapsedMsToday`, `timeoutsToday`).
+
+`GET /api/history/:id` looks up one entry by `globalMessageId` and 404s if not found. The id is
+generated in `server.js` **before** the request is sent to the Protector, so failed attempts
+(timeouts, connection errors) are still logged and retrievable — not just successful ones.
+
 ### `GET /api/settings`
 
-Returns the settings state in two shapes:
+Returns the settings state in three shapes:
 - `fields` — the raw per-field state: `{ enabled: boolean, value: ... }` (what the UI shows/edits)
 - `effective` — the values that will actually be sent on the next request (when `enabled: false`,
   falls back to the `.env` default or auto-detection)
+- `options` — enum choices for fields that aren't free text, e.g. `options.dataChannel` (the full
+  list of `context.data_channel` values the Protector accepts — see section 3)
 
 ### `POST /api/settings`
 
@@ -133,7 +148,9 @@ form:
 ```
 
 Available fields: `maxFileSizeMb`, `requestTimeoutMs` (in milliseconds!), `hostIps`, `hostName`,
-`destinationHttpUrl`, `destinationHttpHostname`.
+`destinationHttpUrl`, `destinationHttpHostname`, `dataChannel` (one of the values in
+`options.dataChannel` from `GET /api/settings` above — currently `TESTING_CHANNEL`, `HTTP`,
+`HTTPS`, `CASB_REAL_TIME`, `ZTNA`, `CASB_DISCOVERY`, `NETWORK_DISCOVERY`, `CASB_API`, `EMAIL`).
 
 ---
 
@@ -242,8 +259,8 @@ wrapping (not the original file's size).
 | Field | Correct value | Note |
 |---|---|---|
 | `client_name` | `CUSTOM_APPLICATION` | **Not** `FORCEPOINT_WEB`! Using `FORCEPOINT_WEB` classifies the traffic as "Web Security Cloud Services" in the Traffic Log — a different channel from "Network" — and a policy scoped to the Network channel never evaluates it at all, even though the request "succeeds" technically (200, but 0 matches). This was the reason traffic looked fine but policy never fired. |
-| `data_channel` | `HTTP` | For API Protector, `HTTPS` is also valid, but `HTTP` is what actually got classified as "Network" in our environment |
-| `activity_type` | `UPLOAD` | The only one supported for HTTP/HTTPS channels |
+| `data_channel` | `HTTP` | For API Protector, `HTTPS` is also valid, but `HTTP` is what actually got classified as "Network" in our environment. Configurable at runtime via the Settings screen / `POST /api/settings` (field `dataChannel`) — see the full accepted value list in section 2. Changing it changes which Traffic Log channel and policy scope the Protector evaluates the request under. |
+| `activity_type` | `UPLOAD` | The only one supported for HTTP/HTTPS channels. Not currently configurable — other channel values may expect a different `activity_type`, which this app doesn't attempt to guess |
 
 ### `source` — testing a policy's Source condition
 

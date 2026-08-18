@@ -150,18 +150,21 @@ async function sendToProtector(metadata, filePartBuffer, fileName) {
  *
  * @param {Buffer} fileBuffer - raw file content (never written to disk)
  * @param {string} originalName - original filename as uploaded by the user
+ * @param {string} [requestId] - pre-generated id to use as global_message_id, so the
+ *   caller can log the same id on both success and failure (network errors, timeouts).
+ *   Defaults to a fresh UUID if not supplied.
  * @returns {Promise<{httpStatus: number, body: object, elapsedMs: number, globalMessageId: string}>}
  */
-async function inspectFile(fileBuffer, originalName, clientIp) {
+async function inspectFile(fileBuffer, originalName, clientIp, requestId) {
   const settings = getSettings();
-  const globalMessageId = crypto.randomUUID();
+  const globalMessageId = requestId || crypto.randomUUID();
   const httpWrappedFile = buildHttpWrappedUpload(fileBuffer, originalName);
 
   const metadata = {
     context: {
       global_message_id: globalMessageId,
       client_name: 'CUSTOM_APPLICATION',
-      data_channel: 'HTTP',
+      data_channel: settings.dataChannel,
       activity_type: 'UPLOAD',
       occurred_message_timestamp_utc_ms: Date.now(),
     },
@@ -201,7 +204,7 @@ async function inspectFile(fileBuffer, originalName, clientIp) {
   };
 
   const result = await sendToProtector(metadata, httpWrappedFile, originalName);
-  return { ...result, globalMessageId };
+  return { ...result, globalMessageId, source: metadata.source, dataChannel: metadata.context.data_channel };
 }
 
 /**

@@ -390,7 +390,8 @@
     <span class="k">"hostIps"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span>, <span class="k">"value"</span>: <span class="s">""</span> },
     <span class="k">"hostName"</span>: { <span class="k">"enabled"</span>: <span class="n">true</span>, <span class="k">"value"</span>: <span class="s">"Amit-Agent"</span> },
     <span class="k">"destinationHttpUrl"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span>, <span class="k">"value"</span>: <span class="s">"https://dlp-client.local/upload"</span> },
-    <span class="k">"destinationHttpHostname"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span>, <span class="k">"value"</span>: <span class="s">"dlp-client.local"</span> }
+    <span class="k">"destinationHttpHostname"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span>, <span class="k">"value"</span>: <span class="s">"dlp-client.local"</span> },
+    <span class="k">"dataChannel"</span>: { <span class="k">"enabled"</span>: <span class="n">false</span>, <span class="k">"value"</span>: <span class="s">"HTTP"</span> }
   },
   <span class="k">"effective"</span>: {
     <span class="k">"maxFileSizeMb"</span>: <span class="n">30</span>,
@@ -398,7 +399,11 @@
     <span class="k">"hostIps"</span>: <span class="s">""</span>,
     <span class="k">"hostName"</span>: <span class="s">"Amit-Agent"</span>,
     <span class="k">"destinationHttpUrl"</span>: <span class="s">"https://dlp-client.local/upload"</span>,
-    <span class="k">"destinationHttpHostname"</span>: <span class="s">"dlp-client.local"</span>
+    <span class="k">"destinationHttpHostname"</span>: <span class="s">"dlp-client.local"</span>,
+    <span class="k">"dataChannel"</span>: <span class="s">"HTTP"</span>
+  },
+  <span class="k">"options"</span>: {
+    <span class="k">"dataChannel"</span>: [<span class="s">"TESTING_CHANNEL"</span>, <span class="s">"HTTP"</span>, <span class="s">"HTTPS"</span>, <span class="s">"CASB_REAL_TIME"</span>, <span class="s">"ZTNA"</span>, <span class="s">"CASB_DISCOVERY"</span>, <span class="s">"NETWORK_DISCOVERY"</span>, <span class="s">"CASB_API"</span>, <span class="s">"EMAIL"</span>]
   }
 }</pre>
         <button type="button" class="pre-copy-btn" aria-label="Copy to clipboard">
@@ -430,6 +435,7 @@
           <tr><td class="name">hostName</td><td class="type">{enabled, value}</td><td></td><td>Max 253 characters</td></tr>
           <tr><td class="name">destinationHttpUrl</td><td class="type">{enabled, value}</td><td></td><td>Must be a valid http(s):// URL</td></tr>
           <tr><td class="name">destinationHttpHostname</td><td class="type">{enabled, value}</td><td></td><td>Max 253 characters</td></tr>
+          <tr><td class="name">dataChannel</td><td class="type">{enabled, value}</td><td></td><td>One of the values in <code>options.dataChannel</code> from <code>GET /api/settings</code></td></tr>
         </table>
 
         <div class="subhead">Example request</div>
@@ -447,6 +453,83 @@
         <div class="status-list">
           <div class="status-row"><span class="status-code ok">200</span><span class="status-desc">Saved — response body is the same shape as <code>GET /api/settings</code></span></div>
           <div class="status-row"><span class="status-code err">400</span><span class="status-desc">One or more values failed validation (see <code>error</code> for which fields)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>History</h2>
+      <p>Read past scans back from the local JSON-lines log</p>
+    </div>
+
+    <div class="endpoint" data-endpoint>
+      <div class="endpoint-row" data-toggle tabindex="0" role="button" aria-expanded="false">
+        <span class="method get">GET</span>
+        <span class="path">/api/history</span>
+        <span class="desc">Returns recent scans (newest first) plus today's aggregate stats</span>
+        <span class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      </div>
+      <div class="endpoint-body">
+        <div class="subhead">Query parameters</div>
+        <table class="params">
+          <tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr>
+          <tr><td class="name">limit</td><td class="type">number</td><td></td><td>Max entries to return (1–500). Default 50.</td></tr>
+        </table>
+
+        <div class="subhead">Example response — 200 OK</div>
+        <div class="pre-wrap">
+        <pre>{
+  <span class="k">"entries"</span>: [
+    {
+      <span class="k">"timestamp"</span>: <span class="s">"2026-08-18T02:55:32.667Z"</span>,
+      <span class="k">"globalMessageId"</span>: <span class="s">"a12aebb8-...-26abf6c83fb0"</span>,
+      <span class="k">"resolution"</span>: <span class="s">"MATCHED"</span>,
+      <span class="k">"violations"</span>: [ <span class="c">/* same shape as POST /api/scan */</span> ],
+      <span class="k">"actions"</span>: [<span class="s">"Block"</span>],
+      <span class="k">"maxNumberOfMatches"</span>: <span class="n">1</span>,
+      <span class="k">"elapsedMs"</span>: <span class="n">84</span>,
+      <span class="k">"fileName"</span>: <span class="s">"file.pdf"</span>,
+      <span class="k">"fileSizeBytes"</span>: <span class="n">18</span>,
+      <span class="k">"httpStatus"</span>: <span class="n">200</span>
+    }
+  ],
+  <span class="k">"stats"</span>: {
+    <span class="k">"scansToday"</span>: <span class="n">7</span>,
+    <span class="k">"blockedToday"</span>: <span class="n">1</span>,
+    <span class="k">"medianElapsedMsToday"</span>: <span class="n">8375</span>,
+    <span class="k">"timeoutsToday"</span>: <span class="n">0</span>
+  }
+}</pre>
+        <button type="button" class="pre-copy-btn" aria-label="Copy to clipboard">
+          <span class="icon-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></span>
+          <span class="icon-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        </button>
+        </div>
+        <p style="font-size:12px;color:var(--ink-muted);line-height:1.6;margin-top:10px">
+          Entries logged before this endpoint existed only have a summary (<code style="font-family:var(--mono);background:var(--surface-2);padding:1px 6px;border-radius:5px;color:var(--ink)">violationCount</code> instead of the full <code style="font-family:var(--mono);background:var(--surface-2);padding:1px 6px;border-radius:5px;color:var(--ink)">violations</code> array) — the UI falls back gracefully for those rows.
+        </p>
+      </div>
+    </div>
+
+    <div class="endpoint" data-endpoint>
+      <div class="endpoint-row" data-toggle tabindex="0" role="button" aria-expanded="false">
+        <span class="method get">GET</span>
+        <span class="path">/api/history/:id</span>
+        <span class="desc">Returns one past scan by its globalMessageId, including failed/timed-out attempts</span>
+        <span class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      </div>
+      <div class="endpoint-body">
+        <p class="bypass-note">
+          The id is generated once per scan attempt <em>before</em> the request is sent to the
+          Protector, so it can be used to look up an entry even if the attempt failed (timeout,
+          connection refused) rather than only successful ones.
+        </p>
+        <div class="subhead">Status codes</div>
+        <div class="status-list">
+          <div class="status-row"><span class="status-code ok">200</span><span class="status-desc">Same entry shape as one item in <code>GET /api/history</code></span></div>
+          <div class="status-row"><span class="status-code err">404</span><span class="status-desc">No scan found with that id</span></div>
         </div>
       </div>
     </div>
