@@ -42,6 +42,47 @@ function isConnectionClassError(error) {
   return CONNECTION_ERROR_CODES.has(error.code);
 }
 
+// TLS handshake/verification failures. Deliberately NOT part of CONNECTION_ERROR_CODES:
+// a TLS failure means we reached the appliance but could not trust it, and silently
+// failing over to a different Protector on that basis could end up sending the same
+// bytes somewhere the user didn't intend. These surface as their own actionable error.
+const TLS_ERROR_CODES = new Set([
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'CERT_HAS_EXPIRED',
+  'CERT_NOT_YET_VALID',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+  'ERR_SSL_WRONG_VERSION_NUMBER',
+  'EPROTO',
+]);
+
+function isTlsError(error) {
+  return TLS_ERROR_CODES.has(error.code);
+}
+
+/**
+ * Resolves the transport a request should actually use, and returns a copy of the
+ * Protector with `protocol`/`port` set accordingly.
+ *
+ * The Inspection API serves both schemes (http :8080 / https :8443), so the caller
+ * may override the .env-configured default per request - that is what backs the
+ * "send securely" toggle in the UI. `undefined` keeps the configured default.
+ *
+ * @param {object} protector - entry from resolveProtector
+ * @param {'http'|'https'} [transport]
+ * @returns {object} effective protector (never mutates the config entry)
+ */
+function withTransport(protector, transport) {
+  const protocol = transport === 'https' || transport === 'http' ? transport : protector.protocol;
+  const port = protocol === 'https'
+    ? (protector.httpsPort ?? protector.port)
+    : (protector.httpPort ?? protector.port);
+  return { ...protector, protocol, port };
+}
+
 /**
  * Looks up a configured Protector by id, falling back to the configured default
  * when no id is given. Throws a clear, mappable error for an unknown id rather
@@ -67,6 +108,11 @@ function listProtectorSummaries() {
   return config.protectors.map((p) => ({
     id: p.id,
     name: p.name,
+    // Scheme only - never the host/port/token. The UI needs to know which transport a
+    // Protector defaults to (so the secure toggle can reflect reality) without this
+    // endpoint becoming a way to enumerate appliance addresses from the browser.
+    defaultTransport: p.protocol,
+    tlsVerified: p.protocol === 'https' || !!p.caCert ? p.rejectUnauthorized : undefined,
     ...(p.disabled ? { disabled: true, unavailableReason: p.unavailableReason } : {}),
   }));
 }
@@ -144,6 +190,14 @@ async function sendToProtector(metadata, filePartBuffer, fileName, protector) {
   if (protector.protocol === 'https') {
     requestOptions.ca = protector.caCert;
     requestOptions.rejectUnauthorized = protector.rejectUnauthorized;
+    // Verify the certificate against a configured name rather than the address we
+    // dialled. Protector certs are typically issued to a hostname (and often carry
+    // no subjectAltName at all) while this app connects by IP, which otherwise fails
+    // with ERR_TLS_CERT_ALTNAME_INVALID even when the chain itself is perfectly good.
+    // Setting servername also sets SNI, and Node's default identity check honours it.
+    if (protector.tlsServername) {
+      requestOptions.servername = protector.tlsServername;
+    }
   }
 
   const transport = protector.protocol === 'https' ? https : http;
@@ -195,10 +249,12 @@ async function sendToProtector(metadata, filePartBuffer, fileName, protector) {
  *   Defaults to a fresh UUID if not supplied.
  * @param {string} [protectorId] - which configured Protector to send to. Defaults to
  *   config.defaultProtectorId. Throws (code UNKNOWN_PROTECTOR) if given an unrecognized id.
+ * @param {'http'|'https'} [transport] - override the scheme for this request only
+ *   (the Inspection API serves both). Omit to use the Protector's configured default.
  * @returns {Promise<{httpStatus: number, body: object, elapsedMs: number, globalMessageId: string}>}
  */
-async function inspectFile(fileBuffer, originalName, clientIp, requestId, protectorId) {
-  const protector = resolveProtector(protectorId);
+async function inspectFile(fileBuffer, originalName, clientIp, requestId, protectorId, transport) {
+  const protector = withTransport(resolveProtector(protectorId), transport);
   if (protector.disabled) {
     throw Object.assign(new Error(`${protector.name} is unavailable: ${protector.unavailableReason}`), {
       code: 'PROTECTOR_DISABLED',
@@ -262,12 +318,14 @@ async function inspectFile(fileBuffer, originalName, clientIp, requestId, protec
       dataChannel: metadata.context.data_channel,
       protectorId: protector.id,
       protectorName: protector.name,
+      transport: protector.protocol,
     };
   } catch (err) {
     // Attach which Protector this attempt targeted even on failure (timeout, connection
     // refused, ...) so a failed scan is still identifiable in history when there's more
-    // than one Protector configured.
-    throw Object.assign(err, { protectorId: protector.id, protectorName: protector.name });
+    // than one Protector configured. The transport goes along too - "it failed" reads
+    // very differently depending on whether it was sent in the clear or over TLS.
+    throw Object.assign(err, { protectorId: protector.id, protectorName: protector.name, transport: protector.protocol });
   }
 }
 
@@ -288,16 +346,16 @@ async function inspectFile(fileBuffer, originalName, clientIp, requestId, protec
  * @returns {Promise<object>} same shape as inspectFile's return, plus
  *   { failedOver: true, attemptedProtectors: [...] } when a fallback was used.
  */
-async function inspectFileWithFailover(fileBuffer, originalName, clientIp, requestId, protectorId) {
+async function inspectFileWithFailover(fileBuffer, originalName, clientIp, requestId, protectorId, transport) {
   if (protectorId) {
-    return inspectFile(fileBuffer, originalName, clientIp, requestId, protectorId);
+    return inspectFile(fileBuffer, originalName, clientIp, requestId, protectorId, transport);
   }
 
   const enabledIds = config.protectors.filter((p) => !p.disabled).map((p) => p.id);
   if (!enabledIds.length) {
     // Nothing enabled at all - let inspectFile produce its normal (PROTECTOR_DISABLED
     // or similar) error against the configured default rather than duplicating that logic.
-    return inspectFile(fileBuffer, originalName, clientIp, requestId, undefined);
+    return inspectFile(fileBuffer, originalName, clientIp, requestId, undefined, transport);
   }
   const candidates = enabledIds.includes(config.defaultProtectorId)
     ? [config.defaultProtectorId, ...enabledIds.filter((id) => id !== config.defaultProtectorId)]
@@ -307,7 +365,7 @@ async function inspectFileWithFailover(fileBuffer, originalName, clientIp, reque
   let lastError;
   for (const candidateId of candidates) {
     try {
-      const result = await inspectFile(fileBuffer, originalName, clientIp, requestId, candidateId);
+      const result = await inspectFile(fileBuffer, originalName, clientIp, requestId, candidateId, transport);
       return attemptedProtectors.length ? { ...result, failedOver: true, attemptedProtectors } : result;
     } catch (err) {
       attemptedProtectors.push({ protectorId: err.protectorId || candidateId, protectorName: err.protectorName, error: err.code || err.message });
@@ -336,8 +394,8 @@ async function inspectFileWithFailover(fileBuffer, originalName, clientIp, reque
  *   config.defaultProtectorId. Throws (code UNKNOWN_PROTECTOR) if given an unrecognized id.
  * @returns {Promise<{httpStatus: number, body: object, elapsedMs: number}>}
  */
-async function inspectRaw(metadataJsonString, fileBuffer, fileName, wrap = true, protectorId) {
-  const protector = resolveProtector(protectorId);
+async function inspectRaw(metadataJsonString, fileBuffer, fileName, wrap = true, protectorId, transport) {
+  const protector = withTransport(resolveProtector(protectorId), transport);
   if (protector.disabled) {
     throw Object.assign(new Error(`${protector.name} is unavailable: ${protector.unavailableReason}`), {
       code: 'PROTECTOR_DISABLED',
@@ -365,8 +423,10 @@ async function inspectRaw(metadataJsonString, fileBuffer, fileName, wrap = true,
  * @param {number} timeoutMs
  * @returns {Promise<{reachable: boolean, elapsedMs: number, error?: string}>}
  */
-function checkProtectorReachability(protectorId, timeoutMs = 3000) {
-  const protector = resolveProtector(protectorId);
+function checkProtectorReachability(protectorId, timeoutMs = 3000, transport) {
+  // Probes the port the next scan would actually use, so the health pill can't read
+  // "reachable" on :8080 while the secure toggle is sending to a closed :8443.
+  const protector = withTransport(resolveProtector(protectorId), transport);
   return new Promise((resolve) => {
     const startedAt = Date.now();
     const socket = net.connect({ host: protector.host, port: protector.port });
@@ -392,4 +452,6 @@ module.exports = {
   listProtectorSummaries,
   resolveProtector,
   isConnectionClassError,
+  isTlsError,
+  withTransport,
 };

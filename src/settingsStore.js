@@ -12,6 +12,13 @@ const DATA_CHANNEL_OPTIONS = [
 ];
 
 const WEBHOOK_FORMAT_OPTIONS = ['generic', 'slack', 'teams'];
+const TRANSPORT_OPTIONS = ['http', 'https'];
+// Which verdicts fire the webhook. BLOCK only by default - widening this to include
+// FLAGGED can be noisy, so it's opt-in.
+const WEBHOOK_TRIGGER_OPTIONS = ['block', 'block_and_flagged'];
+
+const defaultProtector =
+  config.protectors.find((p) => p.id === config.defaultProtectorId) || config.protectors[0];
 
 // Fallback used whenever a field's override is disabled (or never set).
 const DEFAULTS = {
@@ -34,6 +41,16 @@ const DEFAULTS = {
   // Payload shape for the webhook body - 'generic' (plain JSON), 'slack' or 'teams'
   // (their respective incoming-webhook formats). Only meaningful once webhookUrl is set.
   webhookFormat: 'generic',
+  // Which verdicts trigger the webhook - see WEBHOOK_TRIGGER_OPTIONS.
+  webhookTriggerLevel: 'block',
+  // How many scans this app sends to the Protector at once. Was hardcoded to 3 in
+  // the frontend; a single appliance has finite inspection capacity, so this is
+  // worth being able to tune per deployment.
+  maxConcurrentScans: 3,
+  // Which scheme the Scan page's HTTP/HTTPS toggle starts on. Follows the default
+  // Protector's own .env protocol unless overridden here, so a deployment that is
+  // HTTPS-only doesn't have every browser start on plaintext.
+  defaultTransport: defaultProtector ? defaultProtector.protocol : 'http',
 };
 
 const FIELD_KEYS = Object.keys(DEFAULTS);
@@ -66,6 +83,12 @@ const VALIDATORS = {
   webhookUrl: (v) =>
     typeof v === 'string' && v.length <= 2048 && /^https?:\/\/.+/i.test(v.trim()) ? v.trim() : undefined,
   webhookFormat: (v) => (WEBHOOK_FORMAT_OPTIONS.includes(v) ? v : undefined),
+  webhookTriggerLevel: (v) => (WEBHOOK_TRIGGER_OPTIONS.includes(v) ? v : undefined),
+  maxConcurrentScans: (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 1 && n <= 10 ? Math.round(n) : undefined;
+  },
+  defaultTransport: (v) => (TRANSPORT_OPTIONS.includes(v) ? v : undefined),
 };
 
 function readOverrides() {
@@ -139,4 +162,19 @@ function updateSettings(partial) {
   return next;
 }
 
-module.exports = { getSettings, getFieldStates, updateSettings, DATA_CHANNEL_OPTIONS, WEBHOOK_FORMAT_OPTIONS };
+// Exposed so the Settings UI can show what a disabled field would fall back to,
+// rather than the user having to guess or read .env.
+function getDefaults() {
+  return { ...DEFAULTS };
+}
+
+module.exports = {
+  getSettings,
+  getFieldStates,
+  getDefaults,
+  updateSettings,
+  DATA_CHANNEL_OPTIONS,
+  WEBHOOK_FORMAT_OPTIONS,
+  WEBHOOK_TRIGGER_OPTIONS,
+  TRANSPORT_OPTIONS,
+};

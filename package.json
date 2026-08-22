@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "service:install": "node scripts/install-service.js",
-    "service:uninstall": "node scripts/uninstall-service.js"
+    "service:uninstall": "node scripts/uninstall-service.js",
+    "ca:verify": "node scripts/verify-protector-ca.js",
+    "test": "node --test"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

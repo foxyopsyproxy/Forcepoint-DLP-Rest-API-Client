@@ -72,4 +72,20 @@ db.exec(`
   );
 `);
 
+// CREATE TABLE IF NOT EXISTS above never alters a table that already exists, so any
+// column added after a database was first created has to be applied separately.
+// Guarded by PRAGMA table_info so this is safe to run on every boot.
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+// Which scheme the file was actually sent over ('http' | 'https'). NULL for rows
+// written before this was tracked - deliberately not defaulted to 'http', since
+// guessing would misreport older scans that really did go over TLS.
+ensureColumn('scan_history', 'transport', 'TEXT');
+db.exec('CREATE INDEX IF NOT EXISTS idx_history_transport ON scan_history(transport)');
+
 module.exports = { db };

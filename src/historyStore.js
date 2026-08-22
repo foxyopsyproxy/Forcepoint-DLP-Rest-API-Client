@@ -8,8 +8,8 @@ const insertScanStmt = db.prepare(`
     global_message_id, timestamp_ms, file_name, file_size_bytes, resolution, verdict,
     http_status, elapsed_ms, source_host_ips, source_host_name, data_channel,
     protector_id, protector_name, max_number_of_matches, actions_json, error, error_code,
-    failed_over, attempted_protectors_json, schema_version
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    failed_over, attempted_protectors_json, transport, schema_version
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 const insertViolationStmt = db.prepare(`
   INSERT INTO scan_violations (scan_id, policy_id, policy_name, rule_id, rule_name, severity, matches)
@@ -46,13 +46,13 @@ function insertScanRow(params) {
     globalMessageId, timestampMs, fileName, fileSizeBytes, resolution, verdict,
     httpStatus, elapsedMs, sourceHostIps, sourceHostName, dataChannel,
     protectorId, protectorName, maxNumberOfMatches, actionsJson, error, errorCode,
-    failedOver, attemptedProtectorsJson, schemaVersion,
+    failedOver, attemptedProtectorsJson, transport, schemaVersion,
   } = params;
   return insertScanStmt.run(
     globalMessageId, timestampMs, fileName ?? null, fileSizeBytes ?? null, resolution ?? null, verdict,
     httpStatus ?? null, elapsedMs ?? 0, sourceHostIps, sourceHostName, dataChannel ?? null,
     protectorId ?? null, protectorName ?? null, maxNumberOfMatches ?? null, actionsJson, error ?? null, errorCode ?? null,
-    failedOver ? 1 : 0, attemptedProtectorsJson, schemaVersion
+    failedOver ? 1 : 0, attemptedProtectorsJson, transport ?? null, schemaVersion
   );
 }
 
@@ -110,6 +110,7 @@ function recordScanEvent(entry) {
         errorCode: entry.errorCode,
         failedOver: entry.failedOver,
         attemptedProtectorsJson: entry.attemptedProtectors ? JSON.stringify(entry.attemptedProtectors) : null,
+        transport: entry.transport,
         schemaVersion: 2,
       });
       insertViolations(info.lastInsertRowid, violations);
@@ -128,6 +129,14 @@ function median(values) {
   const sorted = values.slice().sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? Math.round((sorted[mid - 1] + sorted[mid]) / 2) : sorted[mid];
+}
+
+// Nearest-rank percentile. Small result sets here (one range's worth of scans),
+// so sorting in JS is cheaper than a windowed SQL query.
+function percentile(sortedValues, p) {
+  if (!sortedValues.length) return 0;
+  const rank = Math.ceil((p / 100) * sortedValues.length);
+  return sortedValues[Math.min(sortedValues.length - 1, Math.max(0, rank - 1))];
 }
 
 function computeStats() {
@@ -161,8 +170,19 @@ function computeStats() {
 // were needed for this migration. Fields the old code always omitted when not
 // applicable (maxNumberOfMatches in particular - see index.html's `!== undefined`
 // checks) are omitted here too, never set to null, to avoid rendering "null".
+// Worst-first: a single scan can violate several rules at once, possibly at
+// different severities, and a table row can only show one badge - "what's the worst
+// thing this scan matched" is the more useful summary than "the first rule returned".
+const SEVERITY_RANK = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+
 function rowToEntry(row) {
   const violationRows = violationsByScanStmt.all(row.id);
+  let highestSeverity;
+  let highestRank = 0;
+  for (const vr of violationRows) {
+    const rank = SEVERITY_RANK[(vr.severity || '').toUpperCase()] || 0;
+    if (rank > highestRank) { highestRank = rank; highestSeverity = vr.severity; }
+  }
   const violationsByPolicy = new Map();
   for (const vr of violationRows) {
     const key = `${vr.policy_id || ''}|${vr.policy_name || ''}`;
@@ -190,6 +210,7 @@ function rowToEntry(row) {
     protectorId: row.protector_id,
     protectorName: row.protector_name,
   };
+  if (highestSeverity) entry.highestSeverity = highestSeverity;
 
   if (row.source_host_ips || row.source_host_name) {
     entry.source = {};
@@ -200,6 +221,7 @@ function rowToEntry(row) {
   if (row.actions_json) entry.actions = JSON.parse(row.actions_json);
   if (row.error !== null) entry.error = row.error;
   if (row.error_code !== null) entry.errorCode = row.error_code;
+  if (row.transport) entry.transport = row.transport;
   if (row.failed_over) {
     entry.failedOver = true;
     if (row.attempted_protectors_json) entry.attemptedProtectors = JSON.parse(row.attempted_protectors_json);
@@ -242,6 +264,31 @@ function buildFilterClauses(filters) {
     params.push(`%${escaped}%`);
   }
   if (Number.isFinite(filters.minElapsedMs)) { clauses.push('elapsed_ms >= ?'); params.push(filters.minElapsedMs); }
+  // Severity/policy/rule live on the CHILD scan_violations table (a scan can violate
+  // several policies/rules at once, each with its own severity), so "this scan
+  // matches" has to be expressed as EXISTS(...) rather than a plain column equality -
+  // a JOIN here would duplicate the parent row once per matching violation and break
+  // both the total count and the pagination math.
+  if (filters.severity) {
+    clauses.push('EXISTS (SELECT 1 FROM scan_violations v WHERE v.scan_id = scan_history.id AND v.severity = ?)');
+    params.push(filters.severity);
+  }
+  if (filters.policyName) {
+    clauses.push('EXISTS (SELECT 1 FROM scan_violations v WHERE v.scan_id = scan_history.id AND v.policy_name = ?)');
+    params.push(filters.policyName);
+  }
+  if (filters.ruleName) {
+    clauses.push('EXISTS (SELECT 1 FROM scan_violations v WHERE v.scan_id = scan_history.id AND v.rule_name = ?)');
+    params.push(filters.ruleName);
+  }
+  // Backs "export selected rows" - the frontend already holds these exact rows in
+  // memory (they came from a prior real query), this just re-fetches them by their
+  // own id for a clean server-authored CSV rather than duplicating export formatting
+  // client-side.
+  if (Array.isArray(filters.ids) && filters.ids.length) {
+    clauses.push(`global_message_id IN (${filters.ids.map(() => '?').join(',')})`);
+    params.push(...filters.ids);
+  }
   return { clauses, params };
 }
 
@@ -294,12 +341,69 @@ function getHistoryForExport(filters = {}, maxRows = 50000) {
 }
 
 /**
- * Aggregates for the Analytics dashboard - scans-over-time/block-rate trend,
- * per-protector and per-data-channel volume splits, top violated policies/rules,
- * a summary (totalScans/totalBlocked/blockRate/medianElapsedMs), and a verdict
- * breakdown (block/warn/pass/error counts). All computed as indexed SQL GROUP
- * BYs rather than re-parsing JSON blobs in JS - this is the reason
- * scan_violations is its own table.
+ * Distinct severities/policies/rules that have actually occurred, for populating
+ * History's filter dropdowns. Deliberately sourced from real data rather than a
+ * fixed list - this app has no endpoint onto the Protector's own policy configuration
+ * (the Inspection API only ever reports a policy/rule AFTER it fires), so "every
+ * policy that could theoretically match" is not something this client can know;
+ * "every policy that HAS matched so far" is the honest, available substitute.
+ */
+function getHistoryFacets() {
+  const severities = db
+    .prepare("SELECT DISTINCT severity FROM scan_violations WHERE severity IS NOT NULL AND severity != '' ORDER BY severity")
+    .all()
+    .map((r) => r.severity)
+    .sort((a, b) => (SEVERITY_RANK[b] || 0) - (SEVERITY_RANK[a] || 0));
+  const policies = db
+    .prepare("SELECT DISTINCT policy_name FROM scan_violations WHERE policy_name IS NOT NULL AND policy_name != '' ORDER BY policy_name COLLATE NOCASE")
+    .all()
+    .map((r) => r.policy_name);
+  const rules = db
+    .prepare("SELECT DISTINCT rule_name FROM scan_violations WHERE rule_name IS NOT NULL AND rule_name != '' ORDER BY rule_name COLLATE NOCASE")
+    .all()
+    .map((r) => r.rule_name);
+  return { severities, policies, rules };
+}
+
+/**
+ * Most recent HIGH-severity violations across all scans, each resolved back to its
+ * parent scan for display (filename, timestamp, global_message_id to link to Verdict
+ * Detail). Backs a "what should I look at first" dashboard panel - the analyst
+ * question this app previously had no direct answer for; Analytics' existing
+ * top-policies/top-rules charts show aggregate counts, not a scannable recent list.
+ */
+function getRecentHighSeverityFindings(limit = 8) {
+  const rows = db
+    .prepare(
+      `SELECT sh.global_message_id, sh.file_name, sh.timestamp_ms, sh.protector_name,
+              v.policy_name, v.rule_name, v.severity, v.matches
+       FROM scan_violations v
+       JOIN scan_history sh ON sh.id = v.scan_id
+       WHERE v.severity = 'HIGH'
+       ORDER BY sh.timestamp_ms DESC, v.id DESC
+       LIMIT ?`
+    )
+    .all(Math.max(1, Math.min(50, limit)));
+  return rows.map((r) => ({
+    globalMessageId: r.global_message_id,
+    fileName: r.file_name,
+    timestamp: new Date(r.timestamp_ms).toISOString(),
+    protectorName: r.protector_name,
+    policyName: r.policy_name,
+    ruleName: r.rule_name,
+    severity: r.severity,
+    matches: r.matches !== null ? r.matches : undefined,
+  }));
+}
+
+/**
+ * Aggregates for the Analytics dashboard - scans-over-time/block-rate/high-severity
+ * trend, per-protector and per-data-channel volume splits, top violated policies/rules
+ * (each with a HIGH-severity sub-count), a summary (totalScans/totalBlocked/blockRate/
+ * highSeverityFindings/medianElapsedMs), a verdict breakdown (block/warn/pass/error
+ * counts), and a priorityFindings list (the most recent HIGH-severity violations in
+ * the same filtered window). All computed as indexed SQL GROUP BYs rather than
+ * re-parsing JSON blobs in JS - this is the reason scan_violations is its own table.
  *
  * @param {object} filters - same shape as queryHistory's filters (from/to/protectorId/dataChannel)
  */
@@ -320,11 +424,15 @@ function getAnalytics(filters = {}) {
     bucket === 'hour'
       ? "strftime('%Y-%m-%d %H:00', timestamp_ms / 1000, 'unixepoch', 'localtime')"
       : "strftime('%Y-%m-%d', timestamp_ms / 1000, 'unixepoch', 'localtime')";
+  // highSeverity uses a correlated scalar subquery, not a JOIN, for the same reason
+  // buildFilterClauses' severity filter does - joining scan_violations here would
+  // duplicate a scan_history row once per violation and inflate `total`/`blocked`.
   const trend = db
     .prepare(
       `SELECT ${bucketExpr} as day,
               COUNT(*) as total,
-              SUM(CASE WHEN verdict = 'block' THEN 1 ELSE 0 END) as blocked
+              SUM(CASE WHEN verdict = 'block' THEN 1 ELSE 0 END) as blocked,
+              SUM((SELECT COUNT(*) FROM scan_violations v WHERE v.scan_id = scan_history.id AND v.severity = 'HIGH')) as highSeverity
        FROM scan_history ${whereWith()}
        GROUP BY day ORDER BY day ASC`
     )
@@ -361,18 +469,36 @@ function getAnalytics(filters = {}) {
 
   const topPolicies = db
     .prepare(
-      `SELECT v.policy_name as name, COUNT(*) as hits, COALESCE(SUM(v.matches), 0) as totalMatches
+      `SELECT v.policy_name as name, COUNT(*) as hits, COALESCE(SUM(v.matches), 0) as totalMatches,
+              SUM(CASE WHEN v.severity = 'HIGH' THEN 1 ELSE 0 END) as highCount
        FROM scan_violations v JOIN scan_history sh ON sh.id = v.scan_id
        ${whereWith('v.policy_name IS NOT NULL')}
        GROUP BY v.policy_name ORDER BY hits DESC LIMIT 10`
     )
     .all(...params);
 
-  const totals = db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN verdict = 'block' THEN 1 ELSE 0 END) as blocked FROM scan_history ${whereWith()}`).get(...params);
+  const totals = db
+    .prepare(
+      `SELECT COUNT(*) as total,
+              SUM(CASE WHEN verdict = 'block' THEN 1 ELSE 0 END) as blocked,
+              SUM(CASE WHEN verdict = 'error' THEN 1 ELSE 0 END) as errors,
+              COALESCE(SUM(file_size_bytes), 0) as bytes,
+              COUNT(DISTINCT file_name) as uniqueFiles
+       FROM scan_history ${whereWith()}`
+    )
+    .get(...params);
+  // A scan-level count (verdict = 'block') already exists above; this is the
+  // rule-level count of specifically HIGH-severity violations in the same window -
+  // "how much of the risk here is actually high-severity" isn't answerable from
+  // totals.blocked alone, since one blocked scan can carry several rules at once.
+  const highSeverityTotal = db
+    .prepare(`SELECT COUNT(*) as c FROM scan_violations v JOIN scan_history sh ON sh.id = v.scan_id ${whereWith("v.severity = 'HIGH'")}`)
+    .get(...params).c;
   const elapsedValues = db
     .prepare(`SELECT elapsed_ms FROM scan_history ${whereWith('elapsed_ms IS NOT NULL')}`)
     .all(...params)
     .map((r) => r.elapsed_ms);
+  const sortedElapsed = elapsedValues.slice().sort((a, b) => a - b);
   const verdictBreakdown = db
     .prepare(`SELECT verdict, COUNT(*) as count FROM scan_history ${whereWith('verdict IS NOT NULL')} GROUP BY verdict`)
     .all(...params);
@@ -380,20 +506,135 @@ function getAnalytics(filters = {}) {
   const summary = {
     totalScans: totals.total || 0,
     totalBlocked: totals.blocked || 0,
+    totalErrors: totals.errors || 0,
     blockRate: totals.total ? (totals.blocked || 0) / totals.total : 0,
+    errorRate: totals.total ? (totals.errors || 0) / totals.total : 0,
+    highSeverityFindings: highSeverityTotal || 0,
     medianElapsedMs: median(elapsedValues),
+    p95ElapsedMs: percentile(sortedElapsed, 95),
+    p99ElapsedMs: percentile(sortedElapsed, 99),
+    maxElapsedMs: sortedElapsed.length ? sortedElapsed[sortedElapsed.length - 1] : 0,
+    totalBytes: totals.bytes || 0,
+    uniqueFiles: totals.uniqueFiles || 0,
   };
+
+  // Same metrics over the immediately-preceding window of equal length, so the UI
+  // can show "vs previous period" deltas. Only meaningful for a bounded range -
+  // "all time" has no earlier period to compare against.
+  const fromMs = parseDateMs(filters.from);
+  const toMs = parseDateMs(filters.to) ?? Date.now();
+  let previous = null;
+  if (fromMs !== undefined && toMs > fromMs) {
+    const windowMs = toMs - fromMs;
+    const prevFilters = { ...filters, from: new Date(fromMs - windowMs).toISOString(), to: new Date(fromMs).toISOString() };
+    const { clauses: pc, params: pp } = buildFilterClauses(prevFilters);
+    const prevWhere = pc.length ? `WHERE ${pc.join(' AND ')}` : '';
+    const prevTotals = db
+      .prepare(
+        `SELECT COUNT(*) as total,
+                SUM(CASE WHEN verdict = 'block' THEN 1 ELSE 0 END) as blocked,
+                SUM(CASE WHEN verdict = 'error' THEN 1 ELSE 0 END) as errors
+         FROM scan_history ${prevWhere}`
+      )
+      .get(...pp);
+    const prevElapsed = db
+      .prepare(`SELECT elapsed_ms FROM scan_history ${prevWhere ? prevWhere + ' AND' : 'WHERE'} elapsed_ms IS NOT NULL`)
+      .all(...pp)
+      .map((r) => r.elapsed_ms);
+    const prevHighSeverity = db
+      .prepare(
+        `SELECT COUNT(*) as c FROM scan_violations v JOIN scan_history sh ON sh.id = v.scan_id
+         ${prevWhere ? prevWhere + " AND v.severity = 'HIGH'" : "WHERE v.severity = 'HIGH'"}`
+      )
+      .get(...pp).c;
+    previous = {
+      totalScans: prevTotals.total || 0,
+      totalBlocked: prevTotals.blocked || 0,
+      totalErrors: prevTotals.errors || 0,
+      blockRate: prevTotals.total ? (prevTotals.blocked || 0) / prevTotals.total : 0,
+      medianElapsedMs: median(prevElapsed),
+      highSeverityFindings: prevHighSeverity || 0,
+    };
+  }
+
+  // Severity mix across every matched rule - answers "are these mostly HIGH-severity
+  // hits or noise?", which the raw block count alone can't tell you.
+  const severityBreakdown = db
+    .prepare(
+      `SELECT COALESCE(v.severity, 'UNKNOWN') as name, COUNT(*) as count
+       FROM scan_violations v JOIN scan_history sh ON sh.id = v.scan_id
+       ${whereWith()}
+       GROUP BY COALESCE(v.severity, 'UNKNOWN') ORDER BY count DESC`
+    )
+    .all(...params);
+
+  // Activity by local hour of day (0-23), for spotting when scanning actually happens.
+  const hourRows = db
+    .prepare(
+      `SELECT CAST(strftime('%H', timestamp_ms / 1000, 'unixepoch', 'localtime') AS INTEGER) as hour,
+              COUNT(*) as total,
+              SUM(CASE WHEN verdict = 'block' THEN 1 ELSE 0 END) as blocked
+       FROM scan_history ${whereWith()} GROUP BY hour`
+    )
+    .all(...params);
+  const hourMap = new Map(hourRows.map((r) => [r.hour, r]));
+  const byHourOfDay = Array.from({ length: 24 }, (_, h) => ({
+    hour: h,
+    total: hourMap.get(h)?.total || 0,
+    blocked: hourMap.get(h)?.blocked || 0,
+  }));
+
+  const topFiles = db
+    .prepare(
+      `SELECT file_name as name, COUNT(*) as count,
+              SUM(CASE WHEN verdict = 'block' THEN 1 ELSE 0 END) as blocked,
+              SUM((SELECT COUNT(*) FROM scan_violations v WHERE v.scan_id = scan_history.id AND v.severity = 'HIGH')) as highCount
+       FROM scan_history ${whereWith('file_name IS NOT NULL')}
+       GROUP BY file_name ORDER BY count DESC LIMIT 10`
+    )
+    .all(...params);
 
   const topRules = db
     .prepare(
-      `SELECT v.rule_name as name, COUNT(*) as hits, COALESCE(SUM(v.matches), 0) as totalMatches
+      `SELECT v.rule_name as name, COUNT(*) as hits, COALESCE(SUM(v.matches), 0) as totalMatches,
+              SUM(CASE WHEN v.severity = 'HIGH' THEN 1 ELSE 0 END) as highCount
        FROM scan_violations v JOIN scan_history sh ON sh.id = v.scan_id
        ${whereWith('v.rule_name IS NOT NULL')}
        GROUP BY v.rule_name ORDER BY hits DESC LIMIT 10`
     )
     .all(...params);
 
-  return { trend, bucket, byProtector, byChannel, topPolicies, topRules, summary, verdictBreakdown };
+  // Backs the Analytics "Priority findings" panel - the most recent HIGH-severity
+  // violations within the SAME filtered window as the rest of this page (unlike
+  // getRecentHighSeverityFindings, which is deliberately unfiltered for the Home
+  // dashboard's "most recent, full stop" panel).
+  const priorityFindings = db
+    .prepare(
+      `SELECT sh.global_message_id, sh.file_name, sh.timestamp_ms, sh.protector_name,
+              v.policy_name, v.rule_name, v.severity, v.matches
+       FROM scan_violations v JOIN scan_history sh ON sh.id = v.scan_id
+       ${whereWith("v.severity = 'HIGH'")}
+       ORDER BY sh.timestamp_ms DESC, v.id DESC
+       LIMIT 8`
+    )
+    .all(...params)
+    .map((r) => ({
+      globalMessageId: r.global_message_id,
+      fileName: r.file_name,
+      timestamp: new Date(r.timestamp_ms).toISOString(),
+      protectorName: r.protector_name,
+      policyName: r.policy_name,
+      ruleName: r.rule_name,
+      severity: r.severity,
+      matches: r.matches !== null ? r.matches : undefined,
+    }));
+
+  return {
+    trend, bucket, byProtector, byChannel, topPolicies, topRules,
+    summary, previous, verdictBreakdown, severityBreakdown, byHourOfDay, topFiles,
+    priorityFindings,
+    generatedAt: new Date().toISOString(),
+  };
 }
 
 /**
@@ -493,6 +734,8 @@ module.exports = {
   getHistoryEntry,
   queryHistory,
   getHistoryForExport,
+  getHistoryFacets,
+  getRecentHighSeverityFindings,
   getAnalytics,
   recordScanEvent,
   isBlockingAction,

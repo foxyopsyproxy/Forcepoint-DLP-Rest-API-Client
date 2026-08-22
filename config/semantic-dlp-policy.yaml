@@ -1,0 +1,95 @@
+# Semantic DLP policy - Milestone 1 (Shadow Mode)
+#
+# This file defines WHAT the local Semantic AI classifier should treat as sensitive,
+# in terms of MEANING and CONTEXT - not keywords, dictionaries, regex, or Forcepoint
+# rule names. It is loaded by src/semanticPolicyStore.js and referenced by
+# prompts/semantic-dlp-v1.txt. See docs/semantic-dlp-architecture.md.
+#
+# Format note: this is parsed by a small hand-rolled parser in
+# src/semanticPolicyStore.js, not a general-purpose YAML library (this project adds
+# no new npm dependencies - see that file's header comment). It supports exactly the
+# shape used below: a flat top-level map of CATEGORY_NAME -> { description: >- block }.
+# Keep new categories in this same shape.
+
+sensitivity_levels:
+  - PUBLIC
+  - INTERNAL
+  - CONFIDENTIAL
+  - RESTRICTED
+  - UNCERTAIN
+
+categories:
+  PERSONAL_INFORMATION:
+    description: >-
+      Any fact tied to a named/identifiable individual (not just IDs/contact info).
+      Already-public info about a public figure is not automatically sensitive.
+
+  CREDENTIALS_AND_SECRETS:
+    description: >-
+      Actual passwords, API keys, tokens, private keys, or connection strings that
+      grant access - not general discussion of password/security policy.
+
+  FINANCIAL_INFORMATION:
+    description: >-
+      Non-public financial detail (specific figures, accounts, unreleased results,
+      arrangements) - not general or already-public financial information.
+
+  HR_INFORMATION:
+    description: >-
+      Non-public detail about a specific employee (compensation, performance,
+      discipline, health, unannounced personnel actions) - not general HR policy.
+
+  LEGAL_INFORMATION:
+    description: >-
+      Non-public litigation strategy, privileged advice, settlement terms, or
+      unannounced investigations - not general legal terms or public filings.
+
+  BUSINESS_STRATEGY:
+    description: >-
+      Non-public future plans, strategic decisions, expansion/contraction, or
+      competitive positioning that could harm the org if disclosed early.
+
+  MERGERS_AND_ACQUISITIONS:
+    description: >-
+      Non-public info about an actual/contemplated M&A transaction - identity,
+      terms, timing, or existence of discussions - before public announcement.
+
+  INTELLECTUAL_PROPERTY:
+    description: >-
+      Non-public inventions, trade secrets, unpublished research, or proprietary
+      methods giving a competitive edge - not public patents or published research.
+
+  SOURCE_CODE:
+    description: >-
+      Proprietary non-public source code, or detail specific enough to reveal how a
+      proprietary system works internally - not general or open-source technical info.
+
+  INTERNAL_ARCHITECTURE:
+    description: >-
+      Non-public detail on how internal systems/infrastructure are actually built,
+      where it could help an attacker - not high-level or public technical discussion.
+
+  SECURITY_INFORMATION:
+    description: >-
+      Non-public vulnerabilities, incidents, defenses, or controls whose disclosure
+      could enable bypass - not general security best-practice discussion.
+
+  CUSTOMER_INFORMATION:
+    description: >-
+      Non-public info identifying a specific customer, or specific relationship/
+      contract/usage detail - not customers discussed only in general terms.
+
+  OPERATIONAL_INFORMATION:
+    description: >-
+      Non-public detail on how the org actually operates day to day (processes,
+      capacity, staffing, metrics) - not generic descriptions of how businesses work.
+
+  CONTRACTUAL_INFORMATION:
+    description: >-
+      Non-public terms of an actual contract or agreement (pricing, obligations,
+      exclusivity) not intended for external disclosure.
+
+  OTHER_SENSITIVE:
+    description: >-
+      Genuinely non-public info creating meaningful risk that doesn't clearly fit
+      another category. Use sparingly - prefer a specific category when it fits.

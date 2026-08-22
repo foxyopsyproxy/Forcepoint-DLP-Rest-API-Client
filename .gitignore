@@ -4,6 +4,10 @@ logs/
 data/
 daemon/
 
+# Real Key Phrase config - site-specific redaction rules, same treatment as .env.
+# config/key-phrases.example.json is the committed template.
+config/key-phrases.json
+
 # TLS material for the app's own HTTPS listener - private keys must never be committed
 certs/
 *.key

@@ -42,7 +42,7 @@ function postJson(url, payload) {
     try {
       target = new URL(url);
     } catch (err) {
-      return resolve();
+      return resolve({ ok: false, error: 'Malformed webhook URL' });
     }
     const transport = target.protocol === 'https:' ? https : http;
     const body = JSON.stringify(payload);
@@ -58,11 +58,11 @@ function postJson(url, payload) {
       },
       (res) => {
         res.resume(); // drain, we don't care about the response body
-        resolve();
+        resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode });
       }
     );
-    req.on('timeout', () => req.destroy());
-    req.on('error', () => {}); // fire-and-forget - failures are the caller's problem to log, not surface to the user
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: `Timed out after ${WEBHOOK_TIMEOUT_MS}ms` }); });
+    req.on('error', (err) => resolve({ ok: false, error: err.code || err.message }));
     req.end(body);
   });
 }
@@ -83,4 +83,53 @@ async function notifyBlock(entry) {
   await postJson(settings.webhookUrl, payload);
 }
 
-module.exports = { notifyBlock };
+/**
+ * Decides whether a finished scan should fire the webhook, honouring the configured
+ * trigger level, then sends it. Keeps the "which verdicts count" rule in one place
+ * instead of leaving it implicit at the call site in server.js.
+ *
+ * @param {object} entry - /api/scan's success response shape
+ * @param {'block'|'warn'|'pass'|'error'} verdict
+ */
+async function notifyScan(entry, verdict) {
+  const settings = getSettings();
+  if (!settings.webhookUrl) return;
+  const wanted = settings.webhookTriggerLevel === 'block_and_flagged' ? ['block', 'warn'] : ['block'];
+  if (!wanted.includes(verdict)) return;
+  await postJson(settings.webhookUrl, buildPayload(settings.webhookFormat, entry));
+}
+
+/**
+ * Sends a clearly-labelled synthetic payload and RETURNS the outcome, so the Settings
+ * screen can tell the user whether their webhook actually works instead of leaving
+ * them to discover it during a real incident.
+ *
+ * @param {string} [url] - test this URL instead of the saved one (lets the user verify
+ *   before saving). Falls back to the saved setting.
+ * @param {string} [format]
+ * @returns {Promise<{ok: boolean, status?: number, error?: string}>}
+ */
+async function sendTestWebhook(url, format) {
+  const settings = getSettings();
+  const target = (url || settings.webhookUrl || '').trim();
+  if (!target) return { ok: false, error: 'No webhook URL configured' };
+
+  const sample = {
+    globalMessageId: 'test-' + Date.now(),
+    fileName: 'webhook-test.txt',
+    resolution: 'MATCHED',
+    violations: [{ policyId: 'TEST', policyName: 'Webhook connectivity test' }],
+    protectorName: 'Settings test',
+    dataChannel: settings.dataChannel,
+  };
+  const payload = buildPayload(format || settings.webhookFormat, sample);
+  // Marked so a receiving system (and whoever reads the channel) can tell this
+  // apart from a real BLOCK.
+  if (payload.text) payload.text = '[TEST] ' + payload.text;
+  if (payload.event) payload.event = 'dlp.scan.test';
+  if (payload.title) payload.title = '[TEST] ' + payload.title;
+
+  return postJson(target, payload);
+}
+
+module.exports = { notifyBlock, notifyScan, sendTestWebhook };

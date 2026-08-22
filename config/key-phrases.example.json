@@ -1,0 +1,16 @@
+{
+  "phrase_sets": {
+    "sensitive_projects": [
+      { "id": "project_alpha", "value": "PROJECT ALPHA" },
+      { "id": "blue_fox", "value": "BLUE FOX" },
+      { "id": "project_dragon", "value": "PROJECT DRAGON" }
+    ]
+  },
+  "rules": {
+    "Project Names": {
+      "phrase_set": "sensitive_projects",
+      "replacement": "[REDACTED]",
+      "case_sensitive": false
+    }
+  }
+}
