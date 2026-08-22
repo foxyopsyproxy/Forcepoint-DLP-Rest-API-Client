@@ -17,7 +17,7 @@ npm install
 
 ## Connection setup (.env)
 
-Copy `.env.example` to `.env` and fill in the details:
+Edit `.env` and fill in the details:
 
 ```bash
 cp .env.example .env
